@@ -5,15 +5,13 @@ rm(list=ls())
 library(raster)
 library(RColorBrewer)
 
-if (Sys.getenv("USER")=='david') hdir <- "/Users/david/Documents/Projects/TableMtProject/"
-
-load(paste(hdir,'Microclimates/Field_data_2012/data/Rdata.files/meta_out.Rdata',sep=''))
+meta <- read.csv('data/csv_masters/location_meta.csv',as.is=T)
 head(meta)
 
-topo10 <- read.csv(paste(hdir,'Microclimates/Field_data_2012/data/site.meta/topo10.csv',sep=''))
+topo10 <- read.csv('data/csv_masters/topo10.csv',as.is=T)
 head(topo10)
 
-topo30 <- read.csv(paste(hdir,'Microclimates/Field_data_2012/data/site.meta/topo30.csv',sep=''))
+topo30 <- read.csv('data/csv_masters/topo30.csv',as.is=T)
 head(topo30)
 
 dlySummary <- read.csv(paste(hdir,'Microclimates/Field_data_2012/data/Rdata.files/dlySummary.csv',sep=''))
