@@ -26,10 +26,10 @@ names(meta)[usecol]
 
 meta2 <- meta[,usecol]
 names(meta2)
-colOrder <- c(13,4,5,17,16,24,23,17,19,20,21,26,27)
+colOrder <- c(13,4,5,17,16,24,23,18,19,20,21,26,27)
 addCol <- which(!(1:27 %in% colOrder))
 colOrder <- c(colOrder,addCol)
 colOrder
 names(meta2)[colOrder]
 
-write.csv(meta2[,colOrder],'data/location_meta.csv',row.names=F)
+write.csv(meta2[,colOrder],'data/csv_masters/location_meta.csv',row.names=F)
