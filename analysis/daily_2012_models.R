@@ -1,10 +1,17 @@
 ## Models for each day of 2012
 ## Rewriting script 2015-06-18 to use data.frames by variable
 
+#----------------#
+# LOAD LIBRARIES #
+#----------------#
+
 rm(list=ls())
 library(raster)
 library(RColorBrewer)
 
+#----------------#
+# LOAD DATA      #
+#----------------#
 meta <- read.csv('data/csv_masters/location_meta.csv',as.is=T)
 head(meta)
 
@@ -14,21 +21,25 @@ head(topo10)
 topo30 <- read.csv('data/csv_masters/topo30.csv',as.is=T)
 head(topo30)
 
-dlySummary <- read.csv(paste(hdir,'Microclimates/Field_data_2012/data/Rdata.files/dlySummary.csv',sep=''))
+dlySummary <- read.csv('data/csv_outfiles/dlySummary.csv',as.is=T)
 head(dlySummary)
 
-load(paste(hdir,'Microclimates/Field_data_2012/data/Rdata.files/dlySol.Rdata',sep=''))
+dlySol <- readRDS('data/Rdata/dlySol.Rdata')
 head(dlySol)
 
-syn <- read.csv('/Users/david/Documents/Projects/TableMtProject/Microclimates/Field_data_2012/data/TM_synoptics/soms.csv',as.is=T)
+syn <- read.csv('data/TM_synoptics/soms.csv',as.is=T)
 head(syn)
 syn <- syn[order(syn$doy),]
 
+# merge SOM node numbers for min and max temp with dlySummary data
 dlySummary <- merge(dlySummary,syn[,c('doy','sommax','sommin')],all=T)
 head(dlySummary)
 tail(dlySummary)
-boxplot(Kwspd.max_m.s~sommax,data=dlySummary)
+boxplot(Tmax~sommax,data=dlySummary)
 
+#-------------------------------------------#
+# CHECK CORRELATIONS IN TOPO VARIABLES      #
+#-------------------------------------------#
 # strong correlations that should be avoided in models:
 cor(topo10[,-c(1:2)],use='pair')
 pairs(topo10[,-c(1:2)])
@@ -42,28 +53,43 @@ cor(topo10[,c('d2at','d2fb')],use='pair') # R = -0.65
 cor(topo10[,c('rad080','rad172')],use='pair') # R = 0.95
 
 # elevation and all tpi variables, but plow is decoupled from elevation and tpi
+### QUESTION HERE - TPI-ELEVATION correlations not so strong
+### IS that right??
 cor(topo10[,c('elevation','tpi050','tpi125','tpi250','tpi500','plow050','plow125','plow250','plow500')],use='pair') # R >= 0.89
 cor(topo30[,c('elevation','tpi050','tpi125','tpi250','tpi500','plow050','plow125','plow250','plow500')],use='pair') # R >= 0.89
 
 # How does daily solar radiation compare to topographic heat load
+# correlation max at 0.7 on day 48 (Feb 17) and around day 295 (Oct 21)
+# minimum mid-summer solstice
 solVthl <- c()
 i=1
 for (i in 1:366) solVthl[i] <- cor(topo10$thl,dlySol[,i],use='pair')
-plot(1:366,solVthl)    
+plot(1:366,solVthl)   
+which.max(solVthl)
 
-# load daily weather data
-load(paste(hdir,'Microclimates/Field_data_2012/data/Rdata.files/cbday.Rdata',sep=''))
+#-----------------------#
+# LOAD DLY WEATHER DATA #
+#-----------------------#
+
+cbday <- readRDS('data/Rdata/cbday.Rdata')
 length(cbday)
+head(cbday[[1]])
+dim(cbday[[1]])
 
-load(paste(hdir,'Microclimates/Field_data_2012/data/Rdata.files/cbvar.Rdata',sep=''))
-length(cbvar)
-names(cbvar)
+#load(paste(hdir,'Microclimates/Field_data_2012/data/Rdata.files/cbvar.Rdata',sep=''))
+#length(cbvar)
+#names(cbvar)
 
+#--------------------------------#
+# MAKE 3 CHAR DAYS VAR           #
+#--------------------------------#
 days <- as.character(1:366)
 days[nchar(days)==1] <- paste('00',days[nchar(days)==1],sep='')
 days[nchar(days)==2] <- paste('0',days[nchar(days)==2],sep='')
 
-# calculate
+#-----------------------#
+# TMAX MODELS           #
+#-----------------------#
 TmaxMods <- data.frame(doy=1:366,Tmax.m1.R2=NA,Tmax.m1.residsd=NA,Tmax.m1.elev.slope=NA,Tmax.m2.R2=NA,Tmax.m2.residsd=NA,Tmax.elev.slope=NA,Tmax.dsol.slope=NA,Tmax.plow500.slope=NA,Tmax.d2fb.slope=NA,Tmax.elev.pval=NA,Tmax.dsol.pval=NA,Tmax.plow500.pval=NA,Tmax.d2fb.pval=NA)
 dim(TmaxMods)
 
