@@ -21,15 +21,14 @@ head(topo10)
 topo30 <- read.csv('data/csv_masters/topo30.csv',as.is=T)
 head(topo30)
 
+dw <- read.csv('data/csv_masters/2012daily.csv',as.is=T)
+head(dw)
+
 dlySummary <- read.csv('data/csv_outfiles/dlySummary.csv',as.is=T)
 head(dlySummary)
 
 dlySol <- readRDS('data/Rdata/dlySol.Rdata')
 head(dlySol)
-
-syn <- read.csv('data/TM_synoptics/soms.csv',as.is=T)
-head(syn)
-syn <- syn[order(syn$doy),]
 
 # merge SOM node numbers for min and max temp with dlySummary data
 dlySummary <- merge(dlySummary,syn[,c('doy','sommax','sommin')],all=T)
@@ -45,6 +44,13 @@ cor(topo10[,-c(1:2)],use='pair')
 pairs(topo10[,-c(1:2)])
 names(topo10)
 
+## find correlations > 0.5
+i <- 3; j <- 4;
+for (i in 3:(ncol(topo10)-1)) for (j in (i+1):ncol(topo10)) {
+    rr <- cor(topo10[,i],topo10[,j],use='pair')
+    if (abs(rr)>0.7) print(c(names(topo10)[c(i,j)],round(rr,3)))
+}
+
 # distance from Atlantic and False Bay, borderline
 # Ran some models swapping these two variables in and out, and found false bay on average increased R2 more, and overall model R2 are significantly correlated so when one works, either works overall. Based on this, all models use Distance to False Bay.
 cor(topo10[,c('d2at','d2fb')],use='pair') # R = -0.65
@@ -52,9 +58,7 @@ cor(topo10[,c('d2at','d2fb')],use='pair') # R = -0.65
 # equinox and winter solstice radiation
 cor(topo10[,c('rad080','rad172')],use='pair') # R = 0.95
 
-# elevation and all tpi variables, but plow is decoupled from elevation and tpi
-### QUESTION HERE - TPI-ELEVATION correlations not so strong
-### IS that right??
+# all tpi variables with each other across scales, and plow with each other across scales; elevation weakly correlated with tpi and plow
 cor(topo10[,c('elevation','tpi050','tpi125','tpi250','tpi500','plow050','plow125','plow250','plow500')],use='pair') # R >= 0.89
 cor(topo30[,c('elevation','tpi050','tpi125','tpi250','tpi500','plow050','plow125','plow250','plow500')],use='pair') # R >= 0.89
 
@@ -76,10 +80,6 @@ length(cbday)
 head(cbday[[1]])
 dim(cbday[[1]])
 
-#load(paste(hdir,'Microclimates/Field_data_2012/data/Rdata.files/cbvar.Rdata',sep=''))
-#length(cbvar)
-#names(cbvar)
-
 #--------------------------------#
 # MAKE 3 CHAR DAYS VAR           #
 #--------------------------------#
@@ -93,24 +93,21 @@ days[nchar(days)==2] <- paste('0',days[nchar(days)==2],sep='')
 TmaxMods <- data.frame(doy=1:366,Tmax.m1.R2=NA,Tmax.m1.residsd=NA,Tmax.m1.elev.slope=NA,Tmax.m2.R2=NA,Tmax.m2.residsd=NA,Tmax.elev.slope=NA,Tmax.dsol.slope=NA,Tmax.plow500.slope=NA,Tmax.d2fb.slope=NA,Tmax.elev.pval=NA,Tmax.dsol.pval=NA,Tmax.plow500.pval=NA,Tmax.d2fb.pval=NA)
 dim(TmaxMods)
 
-cv <- cbvar$Tmax
-class(cv)
-head(cv)
-
-
 # Initial tests used to select variables that perform best across the season
 d=1
 for (d in 1:366) {
     if (d %% 10 == 0) print(d)
-    cv[meta$use4Analyses==0,] <- NA
-    dsol <- dlySol[,paste('rad_tot_',days[d],sep='')]
+    dd <- subset(dw,dw$doy==d)
+    dd <- dd[match(dd$siteID,meta$siteID),]
+    dd$Tmax[meta$use4Analyses==0] <- NA
+    topo10$dsol <- dlySol[,paste('rad_tot_',days[d],sep='')]
     
-    fit1 <- lm(cv[,d]~elevation,data=topo10)
+    fit1 <- lm(dd$Tmax~elevation,data=topo10)
     TmaxMods$Tmax.m1.R2[d] <- summary(fit1)$r.s
     TmaxMods$Tmax.m1.residsd[d] <- sd(fit1$residuals)
     TmaxMods$Tmax.m1.elev.slope[d] <- fit1$coefficients[2]
     
-    fit1 <- lm(cv[,d]~elevation+dsol+plow500+d2fb,data=topo10)
+    fit1 <- lm(dd$Tmax~elevation+dsol+plow500+d2fb,data=topo10)
     TmaxMods$Tmax.m2.R2[d] <- summary(fit1)$r.s
     TmaxMods$Tmax.m2.residsd[d] <- sd(fit1$residuals)
     TmaxMods$Tmax.elev.slope[d] <- fit1$coefficients[2]
@@ -127,8 +124,9 @@ head(TmaxMods)
 tail(TmaxMods)
 
 table(TmaxMods$sommax)
-plot(Tmax.m1.R2~doy,data=TmaxMods)
-plot(Tmax.m2.R2~doy,data=TmaxMods)
+plot(Tmax.m1.R2~doy,data=TmaxMods,type='l')
+plot(Tmax.m2.R2~doy,data=TmaxMods,type='l')
+plot(I(Tmax.m2.R2-Tmax.m1.R2)~doy,data=TmaxMods,type='l')
 
 plot(Tmax.m1.residsd~doy,data=TmaxMods)
 plot(Tmax.m2.residsd~doy,data=TmaxMods)

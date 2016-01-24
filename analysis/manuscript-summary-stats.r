@@ -163,6 +163,13 @@ write.csv(metaOut[,c('domain','siteID','logger','UTM.east','UTM.north','elevatio
 topo30 <- read.csv('data/csv_masters/topo30.csv')
 head(topo30)
 
-dlySummary <- read.csv('/Users/david/Documents/Projects/TableMtProject/Microclimates/Field_data_2012/data/Rdata.files/dlySummary.csv')
+dlySummary <- read.csv('/Users/david/Documents/Projects/TableMtProject/Microclimates/Field_data_2012/data/Rdata.files/dlySummary.csv',as.is=T)
 head(dlySummary)
     
+# RESULTS
+ymd <- strsplit(dlySummary$date,'-')
+ymd <- matrix(unlist(ymd),366,3,byrow=T)
+head(ymd)
+dlySummary$year <- 2012
+dlySummary$month <- as.numeric(ymd[,2])
+dlySummary$day <- as.numeric(ymd[,3])
