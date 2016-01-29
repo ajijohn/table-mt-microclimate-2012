@@ -110,7 +110,7 @@ plot(topo10$plow125,topo10$tpi125)
 # TABLE S2 pairwise correlations between topographic variables
 #O5WhKLtJxNOi2oCHWcUn
 pcor <- cor(topo10[,-c(1:2)],use='pair')
-write.csv(pcor,'data/results/TableS2-paircorr-topo10.csv',quote=F,row.names=F)
+write.csv(pcor,'tables/TableS2-paircorr-topo10.csv',quote=F,row.names=F)
 #
 
 ## Check completeness by site
@@ -156,20 +156,101 @@ metaOut <- metaOut[siteOrder,]
 head(metaOut)
 tail(metaOut)
 names(metaOut)
-write.csv(metaOut[,c('domain','siteID','logger','UTM.east','UTM.north','elevation')],'data/results/TableS1-site-info.csv',row.names=F)
+write.csv(metaOut[,c('domain','siteID','logger','UTM.east','UTM.north','elevation')],'tables/TableS1-site-info.csv',row.names=F)
 
 ## END TABLE S1
 
 topo30 <- read.csv('data/csv_masters/topo30.csv')
 head(topo30)
 
-dlySummary <- read.csv('/Users/david/Documents/Projects/TableMtProject/Microclimates/Field_data_2012/data/Rdata.files/dlySummary.csv',as.is=T)
-head(dlySummary)
+dly <- read.csv('data/csv_outfiles/dlySummary.csv',as.is=T)
+head(dly)
     
 # RESULTS
-ymd <- strsplit(dlySummary$date,'-')
-ymd <- matrix(unlist(ymd),366,3,byrow=T)
-head(ymd)
-dlySummary$year <- 2012
-dlySummary$month <- as.numeric(ymd[,2])
-dlySummary$day <- as.numeric(ymd[,3])
+# First paragraph of results section of ms and Figure 1
+# 3UsTsajSZDualRllk5ea
+#randomStrings(1,20)
+
+# calculate monthly stats
+mw <- data.frame(month=1:12,Tmin=NA,Tmax=NA,Tmean=NA,dtRange=NA,RHmin=NA,RHmax=NA,VPmax=NA,RHsat.hrs=NA,Kps.mean_hPa=NA,Kppt.sum_mm=NA,Kwspd.mean_m.s=NA,Kwspd.max_m.s=NA)
+i=2
+for (i in 2:ncol(mw)) {
+    if (names(mw)[i]=='Kppt.sum_mm') mw[,i] <- tapply(dly[,i+4],dly$month,sum,na.rm=T) else mw[,i] <- tapply(dly[,i+4],dly$month,mean,na.rm=T)
+}
+mw
+
+mdoy <- which(dly$day==15)
+
+# Make figure for daily and monthly temperatures
+# dlySummary file uses data from 88 stations
+sum(meta$use4ClimateSummaries)
+# excluded stations
+meta[meta$use4ClimateSummaries==0,'siteID']
+
+range(dly$Tmax)
+range(dly$Tmin)
+
+pdf('MS_figures/monthly-weather-TDvaM.pdf',6,6)
+op=par(mfrow=c(2,2),mar=c(5,5,1,1))
+# panel A
+plot(Tmax~doy,data=dly,type='l',col='red',ylim=c(min(dly$Tmin),max(dly$Tmax)),xlab='Day of year',ylab='Temperature (°C)')
+points(dly$doy[mdoy],mw$Tmax,type='b',lwd=3,col='black',pch=19)
+points(Tmin~doy,data=dlySummary,type='l',col='blue')
+points(dly$doy[mdoy],mw$Tmin,type='b',lwd=3,col='black',pch=19)
+
+#panel B
+plot(RHmax~doy,data=dly,type='l',ylim=c(min(dly$RHmin),max(dly$RHmax)),col='blue',xlab='Day of year',ylab='Relative humidity (%)')
+points(dly$doy[mdoy],mw$RHmax,type='b',lwd=2,pch=19)
+points(RHmin~doy,data=dly,type='l',col='red')
+points(dly$doy[mdoy],mw$RHmin,type='b',lwd=2,pch=19)
+
+#panel C
+plot(VPmax~doy,data=dly,type='l',col='red',xlab='Day of year',ylab='Vapor pressure deficit (mm?)')
+points(dly$doy[mdoy],mw$VPmax,type='b',lwd=2,pch=19)
+
+#panel D
+plot(RHsat.hrs~doy,data=dly,type='l',col='blue',xlab='Day of year',ylab='Hours per day above 95% RH')
+points(dly$doy[mdoy],mw$RHsat.hrs,type='b',lwd=2,pch=19)
+dev.off()
+
+## END FIGURE 1 and daily and monthly summaries
+
+## Spatial variation - annual averages
+# uhSeBIIQDDN4rVoLEp3N
+dw <- read.csv('data/csv_masters/2012daily.csv',as.is=T)
+dw2 <- subset(dw,dw$siteID %in% meta$siteID[meta$use4ClimateSummaries==1])
+dim(dw2)
+
+sElev <- tapply(meta$elevation[meta$use4ClimateSummaries==1],meta$siteID[meta$use4ClimateSummaries==1],mean)
+
+names(dw2)
+sTmin <- tapply(dw2$Tmin,dw2$siteID,mean,na.rm=T)
+sTmax <- tapply(dw2$Tmax,dw2$siteID,mean,na.rm=T)
+length(sTmin)
+range(sTmin)
+range(sTmax)
+
+names(sElev)==names(sTmin)
+Tmin.elev <- lm(sTmin~sElev)
+Tmax.elev <- lm(sTmax~sElev)
+summary(Tmin.elev)
+summary(Tmax.elev)
+
+hist(Tmin.elev$residuals)
+sd(Tmin.elev$residuals)
+range(Tmin.elev$residuals)
+diff(range(Tmin.elev$residuals))
+
+hist(Tmax.elev$residuals)
+sd(Tmax.elev$residuals)
+range(Tmax.elev$residuals)
+diff(range(Tmax.elev$residuals))
+
+plot(sElev,sTmin,col='blue',pch=19,ylim=c(min(sTmin),max(sTmax)))
+abline(,col='blue',lwd=2)
+points(sElev,sTmax,pch=19,col='red')
+abline(,col='red',lwd=2)
+
+sRHsat <- tapply(dw2$RHsat.hrs,dw2$siteID,mean,na.rm=T)
+plot(sElev,sRHsat,col='blue',pch=19)
+range(sRHsat)

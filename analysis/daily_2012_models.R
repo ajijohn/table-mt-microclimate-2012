@@ -30,12 +30,6 @@ head(dlySummary)
 dlySol <- readRDS('data/Rdata/dlySol.Rdata')
 head(dlySol)
 
-# merge SOM node numbers for min and max temp with dlySummary data
-dlySummary <- merge(dlySummary,syn[,c('doy','sommax','sommin')],all=T)
-head(dlySummary)
-tail(dlySummary)
-boxplot(Tmax~sommax,data=dlySummary)
-
 #-------------------------------------------#
 # CHECK CORRELATIONS IN TOPO VARIABLES      #
 #-------------------------------------------#
@@ -71,6 +65,52 @@ for (i in 1:366) solVthl[i] <- cor(topo10$thl,dlySol[,i],use='pair')
 plot(1:366,solVthl)   
 which.max(solVthl)
 
+#--------------------------------------------#
+# SPATIAL VARIATION IN TOPOGRAPHIC VARIABLES #
+# a6STycTJVjqM8vRd8V8h                       #
+#--------------------------------------------#
+library(ade4)
+meta$siteID==topo10$siteID
+
+head(meta)
+sdist <- dist(meta[-32,c('UTM.east','UTM.north')])
+hist(sdist)
+
+selev <- dist(meta$elevation[-32])
+plot(sdist,selev)
+mantel.rtest(sdist,selev,nrepet=999)
+
+sd2at <- dist(topo10$d2at[-32])
+plot(sdist,sd2at)
+mantel.rtest(sdist,sd2at,nrepet=999)
+
+sd2fb <- dist(topo10$d2fb[-32])
+plot(sdist,sd2fb)
+mantel.rtest(sdist,sd2fb,nrepet=999)
+
+plot(selev,sd2fb)
+mantel.rtest(selev,sd2fb,nrepet=999)
+
+sd2cs <- dist(topo10$d2cs[-32])
+plot(sdist,sd2cs)
+mantel.rtest(sdist,sd2cs,nrepet=999)
+
+dslope <- dist(topo10$slope[-32])
+plot(sdist,dslope)
+mantel.rtest(sdist,dslope,nrepet=999)
+
+dtpi50 <- dist(topo10$tpi050[-32])
+plot(sdist,dtpi50)
+mantel.rtest(sdist,dtpi50,nrepet=999)
+
+drad080 <- dist(topo10$rad080[-32])
+plot(sdist,drad080)
+mantel.rtest(sdist,drad080,nrepet=999)
+
+dthl <- dist(topo10$thl[-32])
+plot(sdist,dthl)
+mantel.rtest(sdist,dthl,nrepet=999)
+
 #-----------------------#
 # LOAD DLY WEATHER DATA #
 #-----------------------#
@@ -89,11 +129,30 @@ days[nchar(days)==2] <- paste('0',days[nchar(days)==2],sep='')
 
 #-----------------------#
 # TMAX MODELS           #
+# OHkNt68RXvbTk4jHfczb  #
 #-----------------------#
 TmaxMods <- data.frame(doy=1:366,Tmax.m1.R2=NA,Tmax.m1.residsd=NA,Tmax.m1.elev.slope=NA,Tmax.m2.R2=NA,Tmax.m2.residsd=NA,Tmax.elev.slope=NA,Tmax.dsol.slope=NA,Tmax.plow500.slope=NA,Tmax.d2fb.slope=NA,Tmax.elev.pval=NA,Tmax.dsol.pval=NA,Tmax.plow500.pval=NA,Tmax.d2fb.pval=NA)
 dim(TmaxMods)
 
-# Initial tests used to select variables that perform best across the season
+if (FALSE) { # sandbox to build up model terms
+    dd <- subset(dw,dw$doy==1)
+    dd <- dd[match(dd$siteID,meta$siteID),]
+    dd$Tmax[meta$use4Analyses==0] <- NA
+    topo10$dsol <- dlySol[,paste('rad_tot_',days[1],sep='')]
+    
+    radterm <- c('dsol','thl','rad080','rad172','rad355')
+    hillterm <- c('tpi050','tpi125','tp250','tpi500','plow050','plow125','plow250','plow500')
+    regterm <- c('d2fb','d2at','d2cs')
+    slterm <- 'slope'
+    
+    # for tmax
+    fit1 <- lm(dd$Tmax~elevation,data=topo10)
+    fit2 <- glm(dd$Tmax~elevation+topo10[,radterm]+topo10[,hillterm]+topo10[,regterm],data=topo10)
+    
+}
+
+## Initial tests used to select variables that perform best across the season
+# check correlations of four predictors
 d=1
 for (d in 1:366) {
     if (d %% 10 == 0) print(d)
@@ -101,6 +160,14 @@ for (d in 1:366) {
     dd <- dd[match(dd$siteID,meta$siteID),]
     dd$Tmax[meta$use4Analyses==0] <- NA
     topo10$dsol <- dlySol[,paste('rad_tot_',days[d],sep='')]
+    
+    cor4 <- cor(cbind(meta$elevation,topo10$dsol,topo10$plow500,topo10$d2fb),use='pair')
+    
+    # check spatial autocorrelation of temperatures
+    dTmax <- dist(dd$Tmax[-32])
+    plot(sdist,dTmax)
+    cor(sdist,dTmax,use='pair')
+    #mantel.rtest(sdist,dTmax,nrepet=999)
     
     fit1 <- lm(dd$Tmax~elevation,data=topo10)
     TmaxMods$Tmax.m1.R2[d] <- summary(fit1)$r.s
@@ -119,7 +186,7 @@ for (d in 1:366) {
     TmaxMods$Tmax.plow500.pval[d] <- anova(fit1)$P[3]
     TmaxMods$Tmax.d2fb.pval[d] <- anova(fit1)$P[4]
 }
-TmaxMods <- merge(TmaxMods,syn[,c('doy','sommax')],all=T)
+TmaxMods <- merge(TmaxMods,dlySummary[,c('doy','sommax')],all=T)
 head(TmaxMods)
 tail(TmaxMods)
 
