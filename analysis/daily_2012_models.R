@@ -1,3 +1,9 @@
+#----------------#
+# THIS SCRIPT HAS BEEN TRANSFERRED TO A MARKDOWN DOCUMENT
+# TableMt_2012_daily.RMd
+# THIS VERSION IS NO LONGER THE MOST CURRENT
+#----------------#
+
 ## Models for each day of 2012
 ## Rewriting script 2015-06-18 to use data.frames by variable
 
@@ -59,9 +65,11 @@ cor(topo30[,c('elevation','tpi050','tpi125','tpi250','tpi500','plow050','plow125
 # How does daily solar radiation compare to topographic heat load
 # correlation max at 0.7 on day 48 (Feb 17) and around day 295 (Oct 21)
 # minimum mid-summer solstice
+head(dlySol)
+head(topo10)
 solVthl <- c()
 i=1
-for (i in 1:366) solVthl[i] <- cor(topo10$thl,dlySol[,i],use='pair')
+for (i in 1:366) solVthl[i] <- cor(topo10$thl315,dlySol[,i],use='pair')
 plot(1:366,solVthl)   
 which.max(solVthl)
 
@@ -107,7 +115,7 @@ drad080 <- dist(topo10$rad080[-32])
 plot(sdist,drad080)
 mantel.rtest(sdist,drad080,nrepet=999)
 
-dthl <- dist(topo10$thl[-32])
+dthl <- dist(topo10$thl315[-32])
 plot(sdist,dthl)
 mantel.rtest(sdist,dthl,nrepet=999)
 
@@ -131,25 +139,179 @@ days[nchar(days)==2] <- paste('0',days[nchar(days)==2],sep='')
 # TMAX MODELS           #
 # OHkNt68RXvbTk4jHfczb  #
 #-----------------------#
-TmaxMods <- data.frame(doy=1:366,Tmax.m1.R2=NA,Tmax.m1.residsd=NA,Tmax.m1.elev.slope=NA,Tmax.m2.R2=NA,Tmax.m2.residsd=NA,Tmax.elev.slope=NA,Tmax.dsol.slope=NA,Tmax.plow500.slope=NA,Tmax.d2fb.slope=NA,Tmax.elev.pval=NA,Tmax.dsol.pval=NA,Tmax.plow500.pval=NA,Tmax.d2fb.pval=NA)
-dim(TmaxMods)
+#TmaxMods <- data.frame(doy=1:366,Tmax.m1.R2=NA,Tmax.m1.residsd=NA,Tmax.m1.elev.slope=NA,Tmax.m2.R2=NA,Tmax.m2.residsd=NA,Tmax.elev.slope=NA,Tmax.dsol.slope=NA,Tmax.plow500.slope=NA,Tmax.d2fb.slope=NA,Tmax.elev.pval=NA,Tmax.dsol.pval=NA,Tmax.plow500.pval=NA,Tmax.d2fb.pval=NA)
+#dim(TmaxMods)
 
-if (FALSE) { # sandbox to build up model terms
-    dd <- subset(dw,dw$doy==1)
-    dd <- dd[match(dd$siteID,meta$siteID),]
-    dd$Tmax[meta$use4Analyses==0] <- NA
-    topo10$dsol <- dlySol[,paste('rad_tot_',days[1],sep='')]
-    
-    radterm <- c('dsol','thl','rad080','rad172','rad355')
-    hillterm <- c('tpi050','tpi125','tp250','tpi500','plow050','plow125','plow250','plow500')
-    regterm <- c('d2fb','d2at','d2cs')
-    slterm <- 'slope'
-    
-    # for tmax
-    fit1 <- lm(dd$Tmax~elevation,data=topo10)
-    fit2 <- glm(dd$Tmax~elevation+topo10[,radterm]+topo10[,hillterm]+topo10[,regterm],data=topo10)
-    
+
+# Run through daily models testing all combinations of elevation, radiation, hillslope, and regional position terms
+radterm <- c('dsol','thl315','rad080','rad172','rad355')
+hillterm <- c('tpi050','tpi125','tpi250','tpi500','plow050','plow125','plow250','plow500')
+regterm <- c('d2fb','d2at','d2cs')
+slterm <- 'slope'
+nModels <- length(radterm)*length(hillterm)*length(regterm)
+
+modterms <- matrix(NA,120,5)
+modnums <- matrix(NA,120,5)
+n <- 0
+for (i in 1:length(radterm)) for (j in 1:length(hillterm)) for (k in 1:length(regterm)) {
+    n <- n+1
+    modterms[n,] <- c('elevation',radterm[i],hillterm[j],regterm[k],slterm)
+    modnums[n,] <- c(1,i,j,k,1)
 }
+
+## running all possible models on daily basis for four dependent parameters: Tmin, Tmax, RHsat.hrs, VPmax
+RSQelev <- list()
+MSEelev <- list()
+RSQm5x <- list()
+MSEm5x <- list()
+BFm5x <- list()
+RSQm5 <- list()
+MSEm5 <- list()
+
+vars <- c('Tmin','Tmax','RHsat.hrs','VPmax')
+for (v in 1:length(vars)) {
+    RSQm5[[v]] <- matrix(NA,366,ncol=nModels)
+    MSEm5[[v]] <- matrix(NA,366,ncol=nModels)
+    RSQelev[[v]] <- rep(NA,366)
+    MSEelev[[v]] <- rep(NA,366)
+    RSQm5x[[v]] <- rep(NA,366)
+    MSEm5x[[v]] <- rep(NA,366)
+    BFm5x[[v]] <- rep(NA,366)
+}
+
+v <- 1
+for (v in 1:length(vars)) {
+    d <- 1
+    for (d in 1:366) {
+        print(c(v,d))
+        dd <- subset(dw,dw$doy==d)
+        dd <- dd[match(dd$siteID,meta$siteID),]
+        dd$yvar <- dd[,vars[v]]
+        dd$yvar[meta$use4Analyses==0] <- NA
+        topo10$dsol <- dlySol[,paste('rad_tot_',days[d],sep='')]
+        
+        #  Base model with elevation only
+        fit1 <- lm(dd$yvar~elevation,data=topo10)
+        RSQelev[[v]][d] <- summary(fit1)$r.sq
+        MSEelev[[v]][d] <- sd(fit1$residuals,na.rm=T)
+        
+        # run all 5 parameter models
+        n <- 0
+        i=1;j=1;k=1
+        for (i in 1:length(radterm)) for (j in 1:length(hillterm)) for (k in 1:length(regterm)) {
+            n <- n+1
+            #print(c(d,i,j,k,n))
+            modterms[n,] <- c('elevation',radterm[i],hillterm[j],regterm[k],slterm)
+            modnums[n,] <- c(1,i,j,k,1)
+            
+            fit2 <- lm(dd$yvar~topo10[,'elevation']+topo10[,radterm[i]]+topo10[,hillterm[j]]+topo10[,regterm[k]]+topo10[,slterm])
+            RSQm5[[v]][d,n] <- summary(fit2)$r.sq
+            MSEm5[[v]][d,n] <- sd(fit2$residuals,na.rm=T)
+        }
+    }
+    
+    ## now extract rsq and mse for the best model, and record id # of best model
+    BFm5x[[v]] <- apply(RSQm5[[v]],1,which.max)
+    for (d in 1:366) {
+        RSQm5x[[v]][d] <- RSQm5[[v]][d,BFm5x[[v]][d]]
+        MSEm5x[[v]][d] <- MSEm5[[v]][d,BFm5x[[v]][d]]
+    }
+}
+
+pairs(cbind(RSQelev[[1]],RSQelev[[2]],RSQelev[[3]],RSQelev[[4]]))
+pairs(cbind(RSQm5x[[1]],RSQm5x[[2]],RSQm5x[[3]],RSQm5x[[4]]))
+
+table(BFm5x[[1]],BFm5x[[2]])
+modterms[46,]
+modnums[46,]
+plot(modnums[BFm5x[[2]],3])
+
+plot(RSQelev[[1]],RSQm5x[[1]])
+plot(RSQelev[[2]],RSQm5x[[2]])
+plot(RSQelev[[3]],RSQm5x[[3]])
+plot(RSQelev[[4]],RSQm5x[[4]])
+
+plot(MSEelev[[1]],MSEm5x[[1]]);abline(0,1)
+plot(MSEelev[[2]],MSEm5x[[2]]);abline(0,1)
+plot(MSEelev[[3]],MSEm5x[[3]]);abline(0,1)
+plot(MSEelev[[4]],MSEm5x[[4]]);abline(0,1)
+
+head(dlySummary)
+boxplot(MSEm5x[[2]]~dlySummary$sommax)
+boxplot(MSEm5x[[1]]~dlySummary$sommin)
+
+plot(RSQm5x[[1]]~dlySummary$Kps.mean_hPa)
+plot(RSQm5x[[2]]~dlySummary$Kps.mean_hPa)
+plot(RSQm5x[[3]]~dlySummary$Kps.mean_hPa)
+plot(RSQm5x[[4]]~dlySummary$Kps.mean_hPa)
+
+plot(RSQm5x[[1]]~dlySummary$Kwspd.mean_m.s)
+plot(RSQm5x[[2]]~dlySummary$Kwspd.mean_m.s)
+plot(RSQm5x[[3]]~dlySummary$Kwspd.mean_m.s)
+plot(RSQm5x[[4]]~dlySummary$Kwspd.mean_m.s)
+
+plot(RSQm5x[[1]]~dlySummary$Tmin)
+plot(RSQm5x[[2]]~dlySummary$Tmax)
+plot(RSQm5x[[3]]~dlySummary$RHsat.hrs)
+plot(RSQm5x[[4]]~dlySummary$VPmax)
+
+plot(RSQm5x[[1]]~I(dlySummary$Tmax - dlySummary$Tmin))
+plot(RSQm5x[[2]]~I(dlySummary$Tmax - dlySummary$Tmin))
+plot(RSQm5x[[3]]~I(dlySummary$Tmax - dlySummary$Tmin))
+plot(RSQm5x[[4]]~I(dlySummary$Tmax - dlySummary$Tmin))
+
+plot(I(dlySummary$Tmax - dlySummary$Tmin)~dlySummary$Tmin)
+plot(I(dlySummary$Tmax - dlySummary$Tmin)~dlySummary$Tmax)
+plot(I(dlySummary$Tmax - dlySummary$Tmin)~dlySummary$RHsat.hrs)
+plot(I(dlySummary$Tmax - dlySummary$Tmin)~dlySummary$VPmax)
+
+
+
+
+
+# head(dw)
+# 
+# plot(1:366,RSQelev,type='l')
+# 
+# RSQmat.avg <- apply(RSQmat,1,mean,na.rm=T)
+# plot(RSQmat.avg,ylim=c(-0.4,0.4),type='n')
+# for (i in 1:120) points(RSQmat[,i]-RSQmat.avg,type='l')
+# 
+# plot(RSQmat[,1]-RSQelev,type='n',ylim=c(0,1))
+# for (i in 1:120) points(RSQmat[,i]-RSQelev,type='l')
+# 
+# RSQmat.max <- apply(RSQmat,1,max,na.rm=T)
+# RSQmat.min <- apply(RSQmat,1,min,na.rm=T)
+# plot(RSQmat.max-RSQmat.min,type='l')
+# plot(RSQmat.max-RSQelev,type='l')
+# plot(RSQmat.min-RSQelev,type='l')
+# 
+# plot(RSQelev,RSQmat.max)
+# 
+# mod.max <- apply(RSQmat,1,which.max)
+# plot(mod.max)
+# for (i in 1:366) print(modterms[mod.max[i],])
+# 
+# plot(modnums[mod.max,2]);radterm
+# plot(modnums[mod.max,3]);hillterm
+# plot(modnums[mod.max,4]);regterm
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 ## Initial tests used to select variables that perform best across the season
 # check correlations of four predictors

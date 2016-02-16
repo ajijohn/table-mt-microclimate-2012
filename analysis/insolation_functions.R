@@ -112,3 +112,24 @@ THL = function(lat=45,slp=0,asp=0,eqn=3,fold.axis=225,unit='deg',rad.unit='yr')
     if (rad.unit=='day') ins = 10000*ins/365
     return(ins)
 }
+
+divang <- function(slp1,asp1,slp2,asp2,unit='deg') {
+    d2r <- function(d) pi * d/180
+    sa2xyz <- function(slp,asp) {
+        x <- sin(slp) * cos(asp)
+        y <- sin(slp) * sin(asp)
+        z <- cos(slp)
+        return(c(x,y,z))
+    }
+    
+    if (unit=='deg') {
+        slp1 <- d2r(slp1);slp2 <- d2r(slp2)
+        asp1 <- d2r(asp1);asp2 <- d2r(asp2)
+    }
+    
+    xyz1 <- sa2xyz(slp1,asp1)
+    xyz2 <- sa2xyz(slp2,asp2)
+    
+    dp <- sum(xyz1*xyz2)
+    acos(dp)
+}
