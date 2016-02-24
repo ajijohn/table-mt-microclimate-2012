@@ -1,0 +1,194 @@
+---
+title: "TableMt_daily_results.Rmd"
+author: "D. Ackerly"
+date: "February 23, 2016"
+output: html_document
+---
+In 2012, we placed 96 dataloggers recording temperature and humidity across Table Mt. and Silvermine. The loggers were stratified across gradients of elevation, slope, exposure and hillslope position (hilltop, valleybottom), and distance from both False Bay and the Atlantic. In previous analyses, the data has been analyzed to extract diurnal Tmin, Tmax, VPmax (maximum daily vapor pressure), and RHsat.hrs (hours per day with relative humidity above 95%).
+
+All of these analyses and the summary data are available at: 
+https://github.com/dackerly/table-mt-microclimate-2012.git
+
+General summary statistics about the sites and daily weather values can be found in 'manuscript-summary-stats.r'. 
+
+This file explores the results of linear models that analyze spatial variation in daily weather variables. The analyses are run in the accompanying file: TableMt_2012_daily.Rmd, which saves the results to file, to be read in here.
+
+## Load files
+```{r}
+rm(list=ls())
+meta <- read.csv('data/csv_masters/location_meta.csv',as.is=T)
+names(meta)
+
+topo10 <- read.csv('data/csv_masters/topo10.csv',as.is=T)
+names(topo10)
+
+dlySummary <- read.csv('data/csv_outfiles/dlySummary.csv',as.is=T)
+head(dlySummary)
+```
+
+## Load results
+In the previous script, I ran linear models for each day of the year to explain spatial variation in daily weather data, for four variables: 
+Tmin, Tmax, RHsat.hrs, and VPmax. 
+
+Models were run using elevation only (just the lapse rate effect). Then a set of 5-term models were run that swapped alternative variables for three different parameters, using all possible combinations, for a total of 168 models. The five parameters were:
+
+1: elevation
+2: solar radiation, with 7 alternative terms: ('dsol','rad080','rad172','rad355','thl315','thl337','thl0')
+3: hillslope position, with 8 alternative terms: ('tpi050','tpi125','tpi250','tpi500','plow050','plow125','plow250','plow500')
+4: regional location in terms of distane to False Bay or the Atlantic Ocean: ('d2fb','d2at','d2cs')
+5: 'slope'
+
+The results are stored in 9 lists, each one containing four items with a matrix for each of the four weather variables
+RWQelev: r-squared for elevation only model (vector, 366)
+MSEelev: mean-square error for elevation only model (vector, 366)
+RSQm5: r-squared for all 5-term models (matrix, 366 x 168)
+MSEm5: mean-square error for all 5-term models (matrix, 366 x 168)
+RSQm5x: highest r-squared for 5-term models (vector, 366)
+MSEm5x: MSE for model with highest R-square, of 5-term models (vector, 366)
+BGm5x: model number for best fit model (vector, 366)
+modterms: matrix of terms for each model (matrix, 168 x 5)
+modnums: matrix of term ids for each model (matrix, 168 x 5)
+```{r}
+allRes <- readRDS('data/Rdata/M5out.Rdata')
+RSQelev <- allRes[[1]]
+MSEelev <- allRes[[2]]
+RSQm5 <- allRes[[3]]
+MSEm5 <- allRes[[4]]
+RSQm5x <- allRes[[5]]
+MSEm5x <- allRes[[6]]
+BFm5x <- allRes[[7]]
+modterms <- allRes[[8]]
+modnums <- allRes[[9]]
+
+vars <- c('Tmin','Tmax','RHsat.hrs','VPmax')
+
+```
+
+Here are the first 6 models, to show what's in the modterms matrix. The 168 rows loop through the 3 variable terms (columns 2-4) in the order shown above.
+```{r}
+head(modterms)
+```
+
+## Results
+Now, let's look at the results! First, how do Rsq for the elevation and the best of the 5-term models vary through the year, for each variable? Interestingly, for all four variables results fluctuate a lot day to day, especially based on elevation alone. Using 5 variables, r-squareds are mostly between 40 and 90%, with lower values for: Tmin in spring and fall, Tmax in summer, RHsat.hrs in winter, and VPmax in summer. 
+```{r}
+op=par(mfrow=c(2,2))
+i=1
+for (i in 1:4) {
+    plot(1:366,RSQelev[[i]],type='l',col='red',ylim=c(0,1),main=vars[i],xlab='DOY',ylab='r-squared')
+    points(1:366,RSQm5x[[i]],type='l',lwd=2)
+}
+par(op)
+```
+
+Interestingly, there are only weak correlations between model fit across variables on a given day. The strongest correlation is for the 5-term models for Tmin and Tmax (var 1 vs var 2 in second plot below):
+```{r}
+pairs(cbind(RSQelev[[1]],RSQelev[[2]],RSQelev[[3]],RSQelev[[4]]))
+pairs(cbind(RSQm5x[[1]],RSQm5x[[2]],RSQm5x[[3]],RSQm5x[[4]]))
+```
+
+My main goal has been trying to make sense of variation in the daily r-squared variables, and next step would be to sort out the meaning of which terms contribute to the best model. Presumably many of the r-squared values are effectively indistinguishable, but that would require quite a lot of examination.
+
+Here are plots of the max r-squared for each variable versus the daily mean for that variable.
+
+Tmin - nothing doing!
+```{r}
+plot(dlySummary$Tmin,RSQm5x[[1]],ylab='Max r-squared, Tmin')
+```
+
+Tmax - r-squared are higher on cooler days, i.e. topography is more predictive of spatial variation in Tmax
+```{r}
+plot(dlySummary$Tmax,RSQm5x[[2]],ylab='Max r-squared, Tmax')
+```
+
+Tmax variation is also much better explained on days with a low Tmin-Tmax difference, which would presumably be humid and/or cloudy:
+```{r}
+plot(dlySummary$Tmax-dlySummary$Tmin,RSQm5x[[2]],ylab='Max r-squared, Tmax',xlab='Tmax-Tmin')
+```
+
+That's interesting, as I think of the coolest days as often being clear with a potentially high Tmin-Tmax difference. Just a quick check on how those two are related:
+```{r}
+plot(dlySummary$Tmax,dlySummary$Tmax-dlySummary$Tmin,xlab='Tmax',ylab='Tmax-Tmin')
+plot(dlySummary$Tmin,dlySummary$Tmax,xlab='Tmin',ylab='Tmax')
+abline(0,1)
+```
+
+RHsat.hrs - r-squared are higher on days with intermediate number of hours of fog - perhaps these days have the most variation among stations to explain, since clear (=0) and all foggy (=24), there's not much variation to work with
+```{r}
+plot(dlySummary$RHsat.hrs,RSQm5x[[3]],ylab='Max r-squared, RHsat.hrs')
+```
+
+VPmax - not much going on
+```{r}
+plot(dlySummary$VPmax,RSQm5x[[4]],ylab='Max r-squared, VPmax')
+```
+
+Inspection of Kirstenbosch weather variables didn't add much here. 
+
+There's also not much obvious variation among SOM classes from Jasper's regional weather pattern analysis:
+```{r}
+plot(dlySummary$sommin,RSQm5x[[1]],ylab='Max r-squared, Tmin',xlab='Tmin regional SOM')
+plot(dlySummary$sommax,RSQm5x[[2]],ylab='Max r-squared, Tmax',xlab='Tmax regional SOM')
+```
+
+
+
+
+```{r}
+# t1 <- table(BFm5x[[1]])
+# modterms[as.numeric(names(t1)[which.max(t1)]),]
+# 
+# t1 <- table(BFm5x[[2]])
+# modterms[as.numeric(names(t1)[which.max(t1)]),]
+# 
+# t1 <- table(BFm5x[[3]])
+# modterms[as.numeric(names(t1)[which.max(t1)]),]
+# 
+# t1 <- table(BFm5x[[4]])
+# modterms[as.numeric(names(t1)[which.max(t1)]),]
+
+# modterms[46,]
+# modnums[46,]
+# plot(modnums[BFm5x[[2]],3])
+# 
+# plot(RSQelev[[1]],RSQm5x[[1]])
+# plot(RSQelev[[2]],RSQm5x[[2]])
+# plot(RSQelev[[3]],RSQm5x[[3]])
+# plot(RSQelev[[4]],RSQm5x[[4]])
+# 
+# plot(MSEelev[[1]],MSEm5x[[1]]);abline(0,1)
+# plot(MSEelev[[2]],MSEm5x[[2]]);abline(0,1)
+# plot(MSEelev[[3]],MSEm5x[[3]]);abline(0,1)
+# plot(MSEelev[[4]],MSEm5x[[4]]);abline(0,1)
+# 
+# head(dlySummary)
+# boxplot(MSEm5x[[2]]~dlySummary$sommax)
+# boxplot(MSEm5x[[1]]~dlySummary$sommin)
+# 
+# plot(RSQm5x[[1]]~dlySummary$Kps.mean_hPa)
+# plot(RSQm5x[[2]]~dlySummary$Kps.mean_hPa)
+# plot(RSQm5x[[3]]~dlySummary$Kps.mean_hPa)
+# plot(RSQm5x[[4]]~dlySummary$Kps.mean_hPa)
+# 
+# plot(RSQm5x[[1]]~dlySummary$Kwspd.mean_m.s)
+# plot(RSQm5x[[2]]~dlySummary$Kwspd.mean_m.s)
+# plot(RSQm5x[[3]]~dlySummary$Kwspd.mean_m.s)
+# plot(RSQm5x[[4]]~dlySummary$Kwspd.mean_m.s)
+# 
+# plot(RSQm5x[[1]]~dlySummary$Tmin)
+# plot(RSQm5x[[2]]~dlySummary$Tmax)
+# plot(RSQm5x[[3]]~dlySummary$RHsat.hrs)
+# plot(RSQm5x[[4]]~dlySummary$VPmax)
+# 
+# plot(RSQm5x[[1]]~I(dlySummary$Tmax - dlySummary$Tmin))
+# plot(RSQm5x[[2]]~I(dlySummary$Tmax - dlySummary$Tmin))
+# plot(RSQm5x[[3]]~I(dlySummary$Tmax - dlySummary$Tmin))
+# plot(RSQm5x[[4]]~I(dlySummary$Tmax - dlySummary$Tmin))
+# 
+# plot(I(dlySummary$Tmax - dlySummary$Tmin)~dlySummary$Tmin)
+# plot(I(dlySummary$Tmax - dlySummary$Tmin)~dlySummary$Tmax)
+# plot(I(dlySummary$Tmax - dlySummary$Tmin)~dlySummary$RHsat.hrs)
+# plot(I(dlySummary$Tmax - dlySummary$Tmin)~dlySummary$VPmax)
+
+```
+
