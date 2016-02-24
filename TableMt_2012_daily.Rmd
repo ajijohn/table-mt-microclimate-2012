@@ -30,15 +30,15 @@ library(RColorBrewer)
 'meta' contains metadata on the 96 sites. 'topo10' and 'topo30' have a series of topographic features sampled from 10m and 30m dem rasters, respectively, based on lat/long positions of each site. SiteID is the unique name for each site. 
 
 Some of the variables in 'meta':
-elevation, slope, and aspect: measured in the field - these are generally not used, and instead we use a consistent set of values taken from the 10m dem.
-use4Analyses, use4ClimateSummaries: sites excluded due to incomplete data (see ms for criteria)
+* elevation, slope, and aspect: measured in the field - these are generally not used, and instead we use a consistent set of values taken from the 10m dem.
+* use4Analyses, use4ClimateSummaries: sites excluded due to incomplete data (see ms for criteria)
 
 Variables in topo10 and topo30:
-d2at, d2fb, d2cs: distance to atlantic, distance to false bay, distance to coast = min(d2at,d2fb)
-rad080, rad172, rad355: solar radiation at summer and winter solstice, and equinox. Not generally used as we have diurnal radiation at each site
-thl0, thl315, thl337: Topographic heat load as defined by McCune and Keon 2002 JVS, with the axis for calculation of the 'folded aspect' (and thus the maximum heat load) at 0, 337 or 315 degrees. The logic is that in the S Hem, NW facing slopes would be hotter than N facing, due to higher afternoon temperatures.
-plow050, 125, 250, 500: Percent lower pixels - the percent of pixels surrounding a focal pixel with a lower elevation, in radii of 50, 125, 250 or 500 m. A measure of potential for cold air to flow away from a spot. Higher values indicate hilltops
-tpi050, 125, 250, 500: Elevation of a focal pixel - mean elevation in the specified radius. Another measure of hillslope position, with positive values for hilltops, negative for valley bottoms.
+* d2at, d2fb, d2cs: distance to atlantic, distance to false bay, distance to coast = min(d2at,d2fb)
+* rad080, rad172, rad355: solar radiation at summer and winter solstice, and equinox. Not generally used as we have diurnal radiation at each site
+* thl0, thl315, thl337: Topographic heat load as defined by McCune and Keon 2002 JVS, with the axis for calculation of the 'folded aspect' (and thus the maximum heat load) at 0, 337 or 315 degrees. The logic is that in the S Hem, NW facing slopes would be hotter than N facing, due to higher afternoon temperatures.
+* plow050, 125, 250, 500: Percent lower pixels - the percent of pixels surrounding a focal pixel with a lower elevation, in radii of 50, 125, 250 or 500 m. A measure of potential for cold air to flow away from a spot. Higher values indicate hilltops
+* tpi050, 125, 250, 500: Elevation of a focal pixel - mean elevation in the specified radius. Another measure of hillslope position, with positive values for hilltops, negative for valley bottoms.
 ```{r}
 meta <- read.csv('data/csv_masters/location_meta.csv',as.is=T)
 dim(meta)
@@ -95,7 +95,7 @@ for (i in 3:(ncol(topo10)-1)) for (j in (i+1):ncol(topo10)) {
 # 
 ```
 
-How does the Topographic Heat Load index, calculated with different aspect orientations, compare to daily radiation load from a solar model? Maximum values are near the equinoxes, with a minimum at summer solstice and a dip at winter solstice. However, I don't understand with the thl315 correlations are lower than the others, and wonder if the calculation was done right. Perhaps don't use that for now.
+How does the Topographic Heat Load index, calculated with different aspect orientations, compare to daily radiation load from a solar model? Maximum values are near the equinoxes, with a minimum at summer solstice and a dip at winter solstice. thl315 has lower correlation as it is furthest from north-facing, so may work for temperature due to hotter afternoon air temp, but is not as strongly correlated with solar radiation per se.
 ```{r}
 # # How does daily solar radiation compare to topographic heat load
 # # correlation max at 0.7 on day 48 (Feb 17) and around day 295 (Oct 21)
@@ -169,8 +169,8 @@ dthl <- dist(topo10$thl0[-32])
 mantel.rtest(sdist,dthl,nrepet=999)
 ```
 
-```{r}
-# 
+```{r echo=F}
+# DEPRECATED CODE
 # #-----------------------#
 # # LOAD DLY WEATHER DATA #
 # # Leaving commented out for now, as this has been replaced by 'dw' data.frame #
@@ -181,6 +181,9 @@ mantel.rtest(sdist,dthl,nrepet=999)
 # head(cbday[[1]])
 # dim(cbday[[1]])
 # 
+```
+
+```{r}
 # #-------------------------------------------------#
 # # MAKE 3 CHAR DAYS VAR, for dlySol variable names #
 # #-------------------------------------------------#
@@ -189,93 +192,170 @@ days[nchar(days)==1] <- paste('00',days[nchar(days)==1],sep='')
 days[nchar(days)==2] <- paste('0',days[nchar(days)==2],sep='')
 ```
 
-Okay, the modeling strategy is a bit brute force now!
+Okay, the modeling strategy is a bit brute force now! First set up four variables that have alternative terms for equivalent topographic variables: radterm = solar radiation; hillterm = topographic hillslope position; regterm = regional position relative to ocean; slterm = slope (only one variable). Plus there's elevation in every model. Then set up modterms and modnums which contain the names and numbers of each item for all 120 combinations (5 radterm * 8 hillterm * 3 regterm). And finally set up a bunch of lists which will have four items each, holding results for Tmin, Tmax, RHsat.hrs, and VPmax; each item in the list will be a 366 row matrix with model results for each day
 
 ```{R}
-# #-------------------------------#
-# # DAILY WEATHER MODELS          #
-# # OHkNt68RXvbTk4jHfczb          #
-# #-------------------------------#
+#-------------------------------#
+# DAILY WEATHER MODELS          #
+# OHkNt68RXvbTk4jHfczb          #
+#-------------------------------#
+
+# Run through daily models testing all combinations of elevation, radiation, hillslope, and regional position terms
+radterm <- c('dsol','rad080','rad172','rad355','thl315','thl337','thl0')
+hillterm <- c('tpi050','tpi125','tpi250','tpi500','plow050','plow125','plow250','plow500')
+regterm <- c('d2fb','d2at','d2cs')
+slterm <- 'slope'
+nModels <- length(radterm)*length(hillterm)*length(regterm)
+
+modterms <- matrix(NA,nModels,5)
+modnums <- matrix(NA,nModels,5)
+n <- 0
+for (i in 1:length(radterm)) for (j in 1:length(hillterm)) for (k in 1:length(regterm)) {
+    n <- n+1
+    modterms[n,] <- c('elevation',radterm[i],hillterm[j],regterm[k],slterm)
+    modnums[n,] <- c(1,i,j,k,1)
+}
+
+## running all possible models on daily basis for four dependent parameters: Tmin, Tmax, RHsat.hrs, VPmax
+RSQelev <- list() # r-squared, elevation only model
+MSEelev <- list() # mean square error, elevation only model
+RSQm5x <- list() # highest r-squared, 5 term model
+MSEm5x <- list() # mean square error for max r-squared 5 term model
+BFm5x <- list() # best-fit model: number from 1:120 indicating which had highest r-squared
+RSQm5 <- list() # matrix of 120 r-squared for all 5 term models
+MSEm5 <- list() # matrix of 120 mean square errors for all 5 term models
+
+vars <- c('Tmin','Tmax','RHsat.hrs','VPmax')
+for (v in 1:length(vars)) {
+    RSQm5[[v]] <- matrix(NA,366,ncol=nModels)
+    MSEm5[[v]] <- matrix(NA,366,ncol=nModels)
+    RSQelev[[v]] <- rep(NA,366)
+    MSEelev[[v]] <- rep(NA,366)
+    RSQm5x[[v]] <- rep(NA,366)
+    MSEm5x[[v]] <- rep(NA,366)
+    BFm5x[[v]] <- rep(NA,366)
+}
+```
+
+Now, run through the four weather variables (v loop) and the 366 days (d loop). Each time through, subset the weather data, and insert the appropriate daily solar radiation from the dlySol data.frame into topo10$dsol. Fit one model with elevation only, and record results. Then fit all 120 possible 5 terms models (i,j,k, loop), saving r-squared and MSE. After running all of them, extract best fit and corresponding r-sq and MSE.
+
+```{r}
+
+v <- 1
+for (v in 1:length(vars)) {
+    d <- 1
+    for (d in 1:366) {
+        #print(c(v,d))
+        dd <- subset(dw,dw$doy==d)
+        dd <- dd[match(dd$siteID,meta$siteID),]
+        dd$yvar <- dd[,vars[v]]
+        dd$yvar[meta$use4Analyses==0] <- NA
+        topo10$dsol <- dlySol[,paste('rad_tot_',days[d],sep='')]
+        
+        #  Base model with elevation only
+        fit1 <- lm(dd$yvar~elevation,data=topo10)
+        RSQelev[[v]][d] <- summary(fit1)$r.sq
+        MSEelev[[v]][d] <- sd(fit1$residuals,na.rm=T)
+        
+        # run all 5 parameter models
+        n <- 0
+        i=1;j=1;k=1
+        for (i in 1:length(radterm)) for (j in 1:length(hillterm)) for (k in 1:length(regterm)) {
+            n <- n+1
+            #print(c(d,i,j,k,n))
+
+            fit2 <- lm(dd$yvar~topo10[,'elevation']+topo10[,radterm[i]]+topo10[,hillterm[j]]+topo10[,regterm[k]]+topo10[,slterm])
+            RSQm5[[v]][d,n] <- summary(fit2)$r.sq
+            MSEm5[[v]][d,n] <- sd(fit2$residuals,na.rm=T)
+        }
+    }
+    
+    ## now extract rsq and mse for the best model, and record id # of best model
+    BFm5x[[v]] <- apply(RSQm5[[v]],1,which.max)
+    for (d in 1:366) {
+        RSQm5x[[v]][d] <- RSQm5[[v]][d,BFm5x[[v]][d]]
+        MSEm5x[[v]][d] <- MSEm5[[v]][d,BFm5x[[v]][d]]
+    }
+}
+```
+## Results
+Now, let's look at the results! First, how do Rsq for the elevation and the best of the 5-term models vary through the year, for each variable? Interestingly, for all four variables results fluctuate a lot day to day, especially based on elevation alone. Using 5 variables, r-squareds are mostly between 40 and 90%, with lower values for: Tmin in spring and fall, Tmax in summer, RHsat.hrs in winter, and VPmax in summer. 
+```{r}
+op=par(mfrow=c(2,2))
+i=1
+for (i in 1:4) {
+    plot(1:366,RSQelev[[i]],type='l',col='red',ylim=c(0,1),main=vars[i],xlab='DOY',ylab='r-squared')
+    points(1:366,RSQm5x[[i]],type='l',lwd=2)
+}
+par(op)
+```
+
+Interestingly, there are only weak correlations between model fit across variables on a given day. The strongest correlation is for the 5-term models for Tmin and Tmax (var 1 vs var 2 in second plot below):
+```{r}
+pairs(cbind(RSQelev[[1]],RSQelev[[2]],RSQelev[[3]],RSQelev[[4]]))
+pairs(cbind(RSQm5x[[1]],RSQm5x[[2]],RSQm5x[[3]],RSQm5x[[4]]))
+```
+
+My main goal has been trying to make sense of variation in the daily r-squared variables, and next step would be to sort out the meaning of which terms contribute to the best model. Presumably many of the r-squared values are effectively indistinguishable, but that would require quite a lot of examination.
+
+Here are plots of the max r-squared for each variable versus the daily mean for that variable.
+
+Tmin - nothing doing!
+```{r}
+plot(dlySummary$Tmin,RSQm5x[[1]],ylab='Max r-squared, Tmin')
+```
+
+Tmax - r-squared are higher on cooler days, i.e. topography is more predictive of spatial variation in Tmax
+```{r}
+plot(dlySummary$Tmax,RSQm5x[[2]],ylab='Max r-squared, Tmax')
+```
+
+Tmax variation is also much better explained on days with a low Tmin-Tmax difference, which would presumably be humid and/or cloudy:
+```{r}
+plot(dlySummary$Tmax-dlySummary$Tmin,RSQm5x[[2]],ylab='Max r-squared, Tmax',xlab='Tmax-Tmin')
+```
+
+That's interesting, as I think of the coolest days as often being clear with a potentially high Tmin-Tmax difference. Just a quick check on how those two are related:
+```{r}
+plot(dlySummary$Tmax,dlySummary$Tmax-dlySummary$Tmin,xlab='Tmax',ylab='Tmax-Tmin')
+plot(dlySummary$Tmin,dlySummary$Tmax,xlab='Tmin',ylab='Tmax')
+abline(0,1)
+```
+
+RHsat.hrs - r-squared are higher on days with intermediate number of hours of fog - perhaps these days have the most variation among stations to explain, since clear (=0) and all foggy (=24), there's not much variation to work with
+```{r}
+plot(dlySummary$RHsat.hrs,RSQm5x[[3]],ylab='Max r-squared, RHsat.hrs')
+```
+
+VPmax - not much going on
+```{r}
+plot(dlySummary$VPmax,RSQm5x[[4]],ylab='Max r-squared, VPmax')
+```
+
+Inspection of Kirstenbosch weather variables didn't add much here. 
+
+There's also not much obvious variation among SOM classes from Jasper's regional weather pattern analysis:
+```{r}
+plot(dlySummary$sommin,RSQm5x[[1]],ylab='Max r-squared, Tmin',xlab='Tmin regional SOM')
+plot(dlySummary$sommax,RSQm5x[[2]],ylab='Max r-squared, Tmax',xlab='Tmax regional SOM')
+```
+
+
+
+
+```{r}
+# t1 <- table(BFm5x[[1]])
+# modterms[as.numeric(names(t1)[which.max(t1)]),]
 # 
-# # Run through daily models testing all combinations of elevation, radiation, hillslope, and regional position terms
-# radterm <- c('dsol','thl315','rad080','rad172','rad355')
-# hillterm <- c('tpi050','tpi125','tpi250','tpi500','plow050','plow125','plow250','plow500')
-# regterm <- c('d2fb','d2at','d2cs')
-# slterm <- 'slope'
-# nModels <- length(radterm)*length(hillterm)*length(regterm)
+# t1 <- table(BFm5x[[2]])
+# modterms[as.numeric(names(t1)[which.max(t1)]),]
 # 
-# modterms <- matrix(NA,120,5)
-# modnums <- matrix(NA,120,5)
-# n <- 0
-# for (i in 1:length(radterm)) for (j in 1:length(hillterm)) for (k in 1:length(regterm)) {
-#     n <- n+1
-#     modterms[n,] <- c('elevation',radterm[i],hillterm[j],regterm[k],slterm)
-#     modnums[n,] <- c(1,i,j,k,1)
-# }
+# t1 <- table(BFm5x[[3]])
+# modterms[as.numeric(names(t1)[which.max(t1)]),]
 # 
-# ## running all possible models on daily basis for four dependent parameters: Tmin, Tmax, RHsat.hrs, VPmax
-# RSQelev <- list()
-# MSEelev <- list()
-# RSQm5x <- list()
-# MSEm5x <- list()
-# BFm5x <- list()
-# RSQm5 <- list()
-# MSEm5 <- list()
-# 
-# vars <- c('Tmin','Tmax','RHsat.hrs','VPmax')
-# for (v in 1:length(vars)) {
-#     RSQm5[[v]] <- matrix(NA,366,ncol=nModels)
-#     MSEm5[[v]] <- matrix(NA,366,ncol=nModels)
-#     RSQelev[[v]] <- rep(NA,366)
-#     MSEelev[[v]] <- rep(NA,366)
-#     RSQm5x[[v]] <- rep(NA,366)
-#     MSEm5x[[v]] <- rep(NA,366)
-#     BFm5x[[v]] <- rep(NA,366)
-# }
-# 
-# v <- 1
-# for (v in 1:length(vars)) {
-#     d <- 1
-#     for (d in 1:366) {
-#         print(c(v,d))
-#         dd <- subset(dw,dw$doy==d)
-#         dd <- dd[match(dd$siteID,meta$siteID),]
-#         dd$yvar <- dd[,vars[v]]
-#         dd$yvar[meta$use4Analyses==0] <- NA
-#         topo10$dsol <- dlySol[,paste('rad_tot_',days[d],sep='')]
-#         
-#         #  Base model with elevation only
-#         fit1 <- lm(dd$yvar~elevation,data=topo10)
-#         RSQelev[[v]][d] <- summary(fit1)$r.sq
-#         MSEelev[[v]][d] <- sd(fit1$residuals,na.rm=T)
-#         
-#         # run all 5 parameter models
-#         n <- 0
-#         i=1;j=1;k=1
-#         for (i in 1:length(radterm)) for (j in 1:length(hillterm)) for (k in 1:length(regterm)) {
-#             n <- n+1
-#             #print(c(d,i,j,k,n))
-#             modterms[n,] <- c('elevation',radterm[i],hillterm[j],regterm[k],slterm)
-#             modnums[n,] <- c(1,i,j,k,1)
-#             
-#             fit2 <- lm(dd$yvar~topo10[,'elevation']+topo10[,radterm[i]]+topo10[,hillterm[j]]+topo10[,regterm[k]]+topo10[,slterm])
-#             RSQm5[[v]][d,n] <- summary(fit2)$r.sq
-#             MSEm5[[v]][d,n] <- sd(fit2$residuals,na.rm=T)
-#         }
-#     }
-#     
-#     ## now extract rsq and mse for the best model, and record id # of best model
-#     BFm5x[[v]] <- apply(RSQm5[[v]],1,which.max)
-#     for (d in 1:366) {
-#         RSQm5x[[v]][d] <- RSQm5[[v]][d,BFm5x[[v]][d]]
-#         MSEm5x[[v]][d] <- MSEm5[[v]][d,BFm5x[[v]][d]]
-#     }
-# }
-# 
-# pairs(cbind(RSQelev[[1]],RSQelev[[2]],RSQelev[[3]],RSQelev[[4]]))
-# pairs(cbind(RSQm5x[[1]],RSQm5x[[2]],RSQm5x[[3]],RSQm5x[[4]]))
-# 
-# table(BFm5x[[1]],BFm5x[[2]])
+# t1 <- table(BFm5x[[4]])
+# modterms[as.numeric(names(t1)[which.max(t1)]),]
+
 # modterms[46,]
 # modnums[46,]
 # plot(modnums[BFm5x[[2]],3])
