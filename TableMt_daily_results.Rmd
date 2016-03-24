@@ -24,18 +24,21 @@ names(topo10)
 
 dlySummary <- read.csv('data/csv_outfiles/dlySummary.csv',as.is=T)
 head(dlySummary)
+
+vars <- c('Tmin','Tmax','T06','T14','RHsat.hrs','VPmax')
+
 ```
 
 ## Load results
-In the previous script, I ran linear models for each day of the year to explain spatial variation in daily weather data, for four variables: 
-Tmin, Tmax, RHsat.hrs, and VPmax. 
+In the previous script, I ran linear models for each day of the year to explain spatial variation in daily weather data, for six variables: 
+Tmin, Tmax, T06, T14, RHsat.hrs, and VPmax. 
 
 Models were run using elevation only (just the lapse rate effect). Then a set of 5-term models were run that swapped alternative variables for three different parameters, using all possible combinations, for a total of 168 models. The five parameters were:
 
 1: elevation
 2: solar radiation, with 7 alternative terms: ('dsol','rad080','rad172','rad355','thl315','thl337','thl0')
 3: hillslope position, with 8 alternative terms: ('tpi050','tpi125','tpi250','tpi500','plow050','plow125','plow250','plow500')
-4: regional location in terms of distane to False Bay or the Atlantic Ocean: ('d2fb','d2at','d2cs')
+4: regional location in terms of distance to False Bay or the Atlantic Ocean: ('d2fb','d2at','d2cs')
 5: 'slope'
 
 The results are stored in 9 lists, each one containing four items with a matrix for each of the four weather variables
@@ -57,34 +60,47 @@ MSEm5 <- allRes[[4]]
 RSQm5x <- allRes[[5]]
 MSEm5x <- allRes[[6]]
 BFm5x <- allRes[[7]]
-modterms <- allRes[[8]]
-modnums <- allRes[[9]]
+dAICx <- allRes[[8]]
+rSlpx <- allRes[[9]]
+modterms <- allRes[[10]]
+modnums <- allRes[[11]]
 
-vars <- c('Tmin','Tmax','RHsat.hrs','VPmax')
+vars <- c('Tmin','Tmax','T06','T14','RHsat.hrs','VPmax')
 
 ```
 
 Here are the first 6 models, to show what's in the modterms matrix. The 168 rows loop through the 3 variable terms (columns 2-4) in the order shown above.
 ```{r}
+dim(modterms)
 head(modterms)
 ```
 
 ## Results
 Now, let's look at the results! First, how do Rsq for the elevation and the best of the 5-term models vary through the year, for each variable? Interestingly, for all four variables results fluctuate a lot day to day, especially based on elevation alone. Using 5 variables, r-squareds are mostly between 40 and 90%, with lower values for: Tmin in spring and fall, Tmax in summer, RHsat.hrs in winter, and VPmax in summer. 
 ```{r}
-op=par(mfrow=c(2,2))
+op=par(mfrow=c(3,2),mar=c(5,5,2,1))
 i=1
-for (i in 1:4) {
-    plot(1:366,RSQelev[[i]],type='l',col='red',ylim=c(0,1),main=vars[i],xlab='DOY',ylab='r-squared')
+for (i in 1:length(vars)) {
+    plot(1:366,RSQelev[[i]],type='l',col='red',ylim=c(0,1),xlab='DOY',ylab='r-squared',main=paste('R2 of 5-term vs. elevation only:',vars[i]))
     points(1:366,RSQm5x[[i]],type='l',lwd=2)
 }
 par(op)
 ```
 
-Interestingly, there are only weak correlations between model fit across variables on a given day. The strongest correlation is for the 5-term models for Tmin and Tmax (var 1 vs var 2 in second plot below):
+Plots of Rsquared for elevation only vs. the five term models are more useful to see how much the other terms can add, especially when elevation alone is a weak predictor. But you can also see days on which the r2 for both models is low - none of these predictors are sufficient to capture the observed variation. We return to this below.
 ```{r}
-pairs(cbind(RSQelev[[1]],RSQelev[[2]],RSQelev[[3]],RSQelev[[4]]))
-pairs(cbind(RSQm5x[[1]],RSQm5x[[2]],RSQm5x[[3]],RSQm5x[[4]]))
+op=par(mfrow=c(3,2),mar=c(5,5,2,1))
+i=1
+for (i in 1:length(vars)) {
+    plot(RSQm5x[[i]]~RSQelev[[i]],ylim=c(0,1),xlim=c(0,1),main=vars[i],xlab='Elevation model r2',ylab='Full model r2')
+    abline(0,1)
+}
+par(op)
+```
+Interestingly, there are only weak correlations between model fit across variables on a given day. The strongest correlation is for the 5-term models for Tmax and Tm14 (var 2 vs var 4 in second plot below):
+```{r}
+pairs(cbind(RSQelev[[1]],RSQelev[[2]],RSQelev[[3]],RSQelev[[4]],RSQelev[[5]],RSQelev[[6]]))
+pairs(cbind(RSQm5x[[1]],RSQm5x[[2]],RSQm5x[[3]],RSQm5x[[4]],RSQm5x[[5]],RSQm5x[[6]]))
 ```
 
 My main goal has been trying to make sense of variation in the daily r-squared variables, and next step would be to sort out the meaning of which terms contribute to the best model. Presumably many of the r-squared values are effectively indistinguishable, but that would require quite a lot of examination.
@@ -113,26 +129,225 @@ plot(dlySummary$Tmin,dlySummary$Tmax,xlab='Tmin',ylab='Tmax')
 abline(0,1)
 ```
 
+T06 - a little more than Tmin - strongest r-squared at colder temperatures, but not all cooler days
+```{r}
+plot(dlySummary$T06,RSQm5x[[3]],ylab='Max r-squared, Tmin')
+```
+
+T14 - even stronger than Tmax - higher r-squared on days with cooler afternoon temperatures
+```{r}
+plot(dlySummary$T14,RSQm5x[[4]],ylab='Max r-squared, Tmin')
+```
+
 RHsat.hrs - r-squared are higher on days with intermediate number of hours of fog - perhaps these days have the most variation among stations to explain, since clear (=0) and all foggy (=24), there's not much variation to work with
 ```{r}
-plot(dlySummary$RHsat.hrs,RSQm5x[[3]],ylab='Max r-squared, RHsat.hrs')
+plot(dlySummary$RHsat.hrs,RSQm5x[[5]],ylab='Max r-squared, RHsat.hrs')
 ```
 
 VPmax - not much going on
 ```{r}
-plot(dlySummary$VPmax,RSQm5x[[4]],ylab='Max r-squared, VPmax')
+plot(dlySummary$VPmax,RSQm5x[[6]],ylab='Max r-squared, VPmax')
 ```
 
-Inspection of Kirstenbosch weather variables didn't add much here. 
+Another possibility is that the r-squareds are higher on days with a greater range of values, just because there's more variation to explain. These plots show r-squared for the elevation model and then the 5-term model, vs. the range from min to max across all 90 stations for a given day. I haven't calculated the station range for T06 and T14 so those are not shown here.
+```{r}
+op=par(mfrow=c(2,2),mar=c(5,5,1,1))
+plot(dlySummary$TminSr,RSQelev[[1]],ylab='Elev r-squared, Tmin',xlab='Range of Tmin across sites')
+plot(dlySummary$TmaxSr,RSQelev[[2]],ylab='Elev r-squared, Tmax',xlab='Range of Tmax across sites')
+plot(dlySummary$RHsatSr,RSQelev[[5]],ylab='Elev r-squared, RHsat.hrs',xlab='Range of RHsat across sites')
+plot(dlySummary$VPmaxSr,RSQelev[[6]],ylab='Elev r-squared, VPmax',xlab='Range of VPmax across sites')
+par(op)
+
+op=par(mfrow=c(2,2),mar=c(5,5,1,1))
+plot(dlySummary$TminSr,RSQm5x[[1]],ylab='M5 r-squared, Tmin',xlab='Range of Tmin across sites')
+plot(dlySummary$TmaxSr,RSQm5x[[2]],ylab='M5 r-squared, Tmax',xlab='Range of Tmax across sites')
+plot(dlySummary$RHsatSr,RSQm5x[[5]],ylab='M5 r-squared, RHsat.hrs',xlab='Range of RHsat across sites')
+plot(dlySummary$VPmaxSr,RSQm5x[[6]],ylab='M5 r-squared, VPmax',xlab='Range of VPmax across sites')
+par(op)
+```
+Well, that's interesting. It's the opposite patterns of what was expected, at least for Tmin. The spatial models are best at predicting variation when the range is low. Note that the monitoring sites span about 800 m elevational range, so a perfect environmental lapse rate would predict about 5°C variation. It's at that low range around 5° that the models have the highest R-squared, suggesting that higher ranges occur when other factors overwhelm the lapse rate effect.
 
 There's also not much obvious variation among SOM classes from Jasper's regional weather pattern analysis:
 ```{r}
 plot(dlySummary$sommin,RSQm5x[[1]],ylab='Max r-squared, Tmin',xlab='Tmin regional SOM')
 plot(dlySummary$sommax,RSQm5x[[2]],ylab='Max r-squared, Tmax',xlab='Tmax regional SOM')
+plot(dlySummary$sommin,RSQm5x[[3]],ylab='Max r-squared, T06',xlab='Tmin regional SOM')
+plot(dlySummary$sommax,RSQm5x[[4]],ylab='Max r-squared, T14',xlab='Tmax regional SOM')
 ```
 
+The model fitting process chose the best term from each set, but perhaps more important is the contribution of each term to the 5 term model, through the year. This was captured with deltaAIC values from a drop1 function on the best-fit model.
+
+Here are the seasonal trends in importance for the five terms, for Tmin, followed by the trends in the actual slopes of the regression terms for each parameter
+```{r}
+op=par(mfrow=c(3,2),mar=c(5,5,1,1))
+plot(1:366,dAICx[[1]][,1],type='l',ylab='Tmin-elev dAIC',xlab='day of year')
+plot(1:366,dAICx[[1]][,2],type='l',ylab='Tmin-solrad dAIC',xlab='day of year')
+plot(1:366,dAICx[[1]][,3],type='l',ylab='Tmin-hill dAIC',xlab='day of year')
+plot(1:366,dAICx[[1]][,4],type='l',ylab='Tmin-oc.dist dAIC',xlab='day of year')
+plot(1:366,dAICx[[1]][,5],type='l',ylab='Tmin-slope dAIC',xlab='day of year')
+par(op)
+#pairs(dAICx[[1]])
+
+op=par(mfrow=c(3,2),mar=c(5,5,1,1))
+plot(1:366,rSlpx[[1]][,1],type='l',ylab='Tmin-elev slope',xlab='day of year')
+abline(h=c(0,-0.006),lty=c(2,3))
+plot(1:366,rSlpx[[1]][,2],type='l',ylab='Tmin-solrad slope',xlab='day of year')
+abline(h=0,lty=2)
+plot(1:366,rSlpx[[1]][,3],type='l',ylab='Tmin-hill slope',xlab='day of year')
+abline(h=0,lty=2)
+plot(1:366,rSlpx[[1]][,4],type='l',ylab='Tmin-oc.dist slope',xlab='day of year')
+abline(h=0,lty=2)
+plot(1:366,rSlpx[[1]][,5],type='l',ylab='Tmin-slope slope',xlab='day of year')
+abline(h=0,lty=2)
+par(op)
+#pairs(dAICx[[1]])
+
+# 
+# op=par(mfrow=c(3,2),mar=c(5,5,1,1))
+# plot(rSlpx[[1]][,1],dAICx[[1]][,1])
+# plot(rSlpx[[1]][,2],dAICx[[1]][,2])
+# plot(rSlpx[[1]][,3],dAICx[[1]][,3])
+# plot(rSlpx[[1]][,4],dAICx[[1]][,4])
+# plot(rSlpx[[1]][,5],dAICx[[1]][,5])
+# par(op)
+# pairs(rSlpx[[1]])
+```
+For Tmin, it appears that environmental lapse rates fluctuate around expected values of about -6°/1000 m (-0.006 here), with slightly steeper rates in spring. Other terms have expected effects: positive effect of solar radiation (units depends on exactly which term was selected in the model); 
 
 
+Here are the seasonal trends in importance and the slopes for the five terms, for Tmax
+```{r}
+op=par(mfrow=c(3,2),mar=c(5,5,1,1))
+plot(1:366,dAICx[[2]][,1],type='l',ylab='Tmax-elev dAIC',xlab='day of year')
+
+plot(1:366,dAICx[[2]][,2],type='l',ylab='Tmax-solrad dAIC',xlab='day of year')
+plot(1:366,dAICx[[2]][,3],type='l',ylab='Tmax-hill dAIC',xlab='day of year')
+plot(1:366,dAICx[[2]][,4],type='l',ylab='Tmax-oc.dist dAIC',xlab='day of year')
+plot(1:366,dAICx[[2]][,5],type='l',ylab='Tmax-slope dAIC',xlab='day of year')
+par(op)
+#pairs(dAICx[[1]])
+
+op=par(mfrow=c(3,2),mar=c(5,5,1,1))
+plot(1:366,rSlpx[[2]][,1],type='l',ylab='Tmax-elev slope',xlab='day of year')
+abline(h=c(0,-0.006),lty=c(2,3))
+plot(1:366,rSlpx[[2]][,2],type='l',ylab='Tmax-solrad slope',xlab='day of year')
+abline(h=0,lty=2)
+plot(1:366,rSlpx[[2]][,3],type='l',ylab='Tmax-hill slope',xlab='day of year')
+abline(h=0,lty=2)
+plot(1:366,rSlpx[[2]][,4],type='l',ylab='Tmax-oc.dist slope',xlab='day of year')
+abline(h=0,lty=2)
+plot(1:366,rSlpx[[2]][,5],type='l',ylab='Tmax-slope slope',xlab='day of year')
+abline(h=0,lty=2)
+par(op)
+#pairs(dAICx[[1]])
+```
+
+Here are the seasonal trends in importance and the slopes for the five terms, for T06
+```{r}
+op=par(mfrow=c(3,2),mar=c(5,5,1,1))
+plot(1:366,dAICx[[3]][,1],type='l',ylab='T06-elev dAIC',xlab='day of year')
+
+plot(1:366,dAICx[[3]][,2],type='l',ylab='T06-solrad dAIC',xlab='day of year')
+plot(1:366,dAICx[[3]][,3],type='l',ylab='T06-hill dAIC',xlab='day of year')
+plot(1:366,dAICx[[3]][,4],type='l',ylab='T06-oc.dist dAIC',xlab='day of year')
+plot(1:366,dAICx[[3]][,5],type='l',ylab='T06-slope dAIC',xlab='day of year')
+par(op)
+#pairs(dAICx[[1]])
+
+op=par(mfrow=c(3,2),mar=c(5,5,1,1))
+plot(1:366,rSlpx[[3]][,1],type='l',ylab='T06-elev slope',xlab='day of year')
+abline(h=c(0,-0.006),lty=c(2,3))
+plot(1:366,rSlpx[[3]][,2],type='l',ylab='T06-solrad slope',xlab='day of year')
+abline(h=0,lty=2)
+plot(1:366,rSlpx[[3]][,3],type='l',ylab='T06-hill slope',xlab='day of year')
+abline(h=0,lty=2)
+plot(1:366,rSlpx[[3]][,4],type='l',ylab='T06-oc.dist slope',xlab='day of year')
+abline(h=0,lty=2)
+plot(1:366,rSlpx[[3]][,5],type='l',ylab='T06-slope slope',xlab='day of year')
+abline(h=0,lty=2)
+par(op)
+#pairs(dAICx[[1]])
+```
+
+Here are the seasonal trends in importance and the slopes for the five terms, for T14. Elevation, solar radiation and slope are much stronger in winter. Slopes for ocean distance drop during winter.
+```{r}
+op=par(mfrow=c(3,2),mar=c(5,5,1,1))
+plot(1:366,dAICx[[4]][,1],type='l',ylab='T14-elev dAIC',xlab='day of year')
+
+plot(1:366,dAICx[[4]][,2],type='l',ylab='T14-solrad dAIC',xlab='day of year')
+plot(1:366,dAICx[[4]][,3],type='l',ylab='T14-hill dAIC',xlab='day of year')
+plot(1:366,dAICx[[4]][,4],type='l',ylab='T14-oc.dist dAIC',xlab='day of year')
+plot(1:366,dAICx[[4]][,5],type='l',ylab='T14-slope dAIC',xlab='day of year')
+par(op)
+#pairs(dAICx[[1]])
+
+op=par(mfrow=c(3,2),mar=c(5,5,1,1))
+plot(1:366,rSlpx[[4]][,1],type='l',ylab='T14-elev slope',xlab='day of year')
+abline(h=c(0,-0.006),lty=c(2,3))
+plot(1:366,rSlpx[[4]][,2],type='l',ylab='T14-solrad slope',xlab='day of year')
+abline(h=0,lty=2)
+plot(1:366,rSlpx[[4]][,3],type='l',ylab='T14-hill slope',xlab='day of year')
+abline(h=0,lty=2)
+plot(1:366,rSlpx[[4]][,4],type='l',ylab='T14-oc.dist slope',xlab='day of year')
+abline(h=0,lty=2)
+plot(1:366,rSlpx[[4]][,5],type='l',ylab='T14-slope slope',xlab='day of year')
+abline(h=0,lty=2)
+par(op)
+#pairs(dAICx[[1]])
+```
+
+Here are the seasonal trends in importance for the five terms, for RHsat.hrs
+```{r}
+op=par(mfrow=c(3,2),mar=c(5,5,1,1))
+plot(1:366,dAICx[[5]][,1],type='l',ylab='RHsat-elev dAIC',xlab='day of year')
+
+plot(1:366,dAICx[[5]][,2],type='l',ylab='RHsat-solrad dAIC',xlab='day of year')
+plot(1:366,dAICx[[5]][,3],type='l',ylab='RHsat-hill dAIC',xlab='day of year')
+plot(1:366,dAICx[[5]][,4],type='l',ylab='RHsat-oc.dist dAIC',xlab='day of year')
+plot(1:366,dAICx[[5]][,5],type='l',ylab='RHsat-slope dAIC',xlab='day of year')
+par(op)
+#pairs(dAICx[[1]])
+
+op=par(mfrow=c(3,2),mar=c(5,5,1,1))
+plot(1:366,rSlpx[[5]][,1],type='l',ylab='RHsat-elev slope',xlab='day of year')
+abline(h=c(0,-0.006),lty=c(2,3))
+plot(1:366,rSlpx[[5]][,2],type='l',ylab='RHsat-solrad slope',xlab='day of year')
+abline(h=0,lty=2)
+plot(1:366,rSlpx[[5]][,3],type='l',ylab='RHsat-hill slope',xlab='day of year')
+abline(h=0,lty=2)
+plot(1:366,rSlpx[[5]][,4],type='l',ylab='RHsat-oc.dist slope',xlab='day of year')
+abline(h=0,lty=2)
+plot(1:366,rSlpx[[5]][,5],type='l',ylab='RHsat-slope slope',xlab='day of year')
+abline(h=0,lty=2)
+par(op)
+#pairs(dAICx[[1]])
+```
+
+Here are the seasonal trends in importance for the five terms, for VPmax
+```{r}
+op=par(mfrow=c(3,2),mar=c(5,5,1,1))
+plot(1:366,dAICx[[6]][,1],type='l',ylab='VPmax-elev dAIC',xlab='day of year')
+
+plot(1:366,dAICx[[6]][,2],type='l',ylab='VPmax-solrad dAIC',xlab='day of year')
+plot(1:366,dAICx[[6]][,3],type='l',ylab='VPmax-hill dAIC',xlab='day of year')
+plot(1:366,dAICx[[6]][,4],type='l',ylab='VPmax-oc.dist dAIC',xlab='day of year')
+plot(1:366,dAICx[[6]][,5],type='l',ylab='VPmax-slope dAIC',xlab='day of year')
+par(op)
+#pairs(dAICx[[1]])
+
+op=par(mfrow=c(3,2),mar=c(5,5,1,1))
+plot(1:366,rSlpx[[6]][,1],type='l',ylab='VPmax-elev slope',xlab='day of year')
+abline(h=c(0,-0.006),lty=c(2,3))
+plot(1:366,rSlpx[[6]][,2],type='l',ylab='VPmax-solrad slope',xlab='day of year')
+abline(h=0,lty=2)
+plot(1:366,rSlpx[[6]][,3],type='l',ylab='VPmax-hill slope',xlab='day of year')
+abline(h=0,lty=2)
+plot(1:366,rSlpx[[6]][,4],type='l',ylab='VPmax-oc.dist slope',xlab='day of year')
+abline(h=0,lty=2)
+plot(1:366,rSlpx[[6]][,5],type='l',ylab='VPmax-slope slope',xlab='day of year')
+abline(h=0,lty=2)
+par(op)
+```
 
 ```{r}
 # t1 <- table(BFm5x[[1]])

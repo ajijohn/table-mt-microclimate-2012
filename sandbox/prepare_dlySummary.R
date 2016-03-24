@@ -1,16 +1,18 @@
 # prepare summary of daily weather, including Kirstenbosch conditions
-
+rm(list=ls())
 meta <- read.csv('data/csv_masters/location_meta.csv',as.is=T)
 head(meta)
 
 dw <- read.csv('data/csv_masters/2012daily.csv')
 dw$dtRange <- dw$Tmax - dw$Tmin
+dw$dt1406 <- dw$T14-dw$T06
+dw$Tm1406 <- (dw$T14+dw$T06)/2
 head(dw)
 dim(dw)
 dw <- dw[meta$use4ClimateSummaries[match(dw$siteID,meta$siteID)]==1,]
 dim(dw)
 
-dlySummary <- data.frame(year=2012,month=NA,day=NA,doy=1:366,date=as.Date(1:366,origin='2011-12-31'),Tmin=NA,Tmax=NA,Tmean=NA,dtRange=NA,RHmin=NA,RHmax=NA,VPmax=NA,RHsat.hrs=NA)
+dlySummary <- data.frame(year=2012,month=NA,day=NA,doy=1:366,date=as.Date(1:366,origin='2011-12-31'),Tmin=NA,Tmax=NA,Tmean=NA,dtRange=NA,T06=NA,T14=NA,Tm1406=NA,dt1406=NA,RHmin=NA,RHmax=NA,VPmax=NA,RHsat.hrs=NA,TminSr=NA,TmaxSr=NA,RHsatSr=NA,VPmaxSr=NA)
 head(dlySummary)
 
 dlySummary$month <- as.numeric(substr(dlySummary$date,6,7))
@@ -18,7 +20,7 @@ dlySummary$day <- as.numeric(substr(dlySummary$date,9,10))
 head(dlySummary)
 tail(dlySummary)
 
-vars <- c('Tmin','Tmax','Tmean','dtRange','RHmin','RHmax','VPmax','RHsat.hrs')
+vars <- c('Tmin','Tmax','Tmean','dtRange','T06','T14','Tm1406','dt1406','RHmin','RHmax','VPmax','RHsat.hrs')
 
 dw2 <- dw[,c('doy','siteID',vars)]
 head(dw2)
@@ -26,9 +28,22 @@ head(dw2)
 plot(tapply(dw2$Tmin,dw2$doy,mean,na.rm=T))
 
 i=1
-for (i in 1:8) dlySummary[,(i+5)] <- tapply(dw2[,i+2],dw2$doy,mean,na.rm=T)
+for (i in 1:length(vars)) dlySummary[,(i+5)] <- tapply(dw2[,i+2],dw2$doy,mean,na.rm=T)
 head(dlySummary)
 
+# now calculate the spatial range across sites for each focal variable on each day
+dlySummary$TminSr <- tapply(dw2$Tmin,dw2$doy,max,na.rm=T) - tapply(dw2$Tmin,dw2$doy,min,na.rm=T)
+dlySummary$TmaxSr <- tapply(dw2$Tmax,dw2$doy,max,na.rm=T) - tapply(dw2$Tmax,dw2$doy,min,na.rm=T)
+dlySummary$RHsatSr <- tapply(dw2$RHsat.hrs,dw2$doy,max,na.rm=T) - tapply(dw2$RHsat.hrs,dw2$doy,min,na.rm=T)
+dlySummary$VPmaxSr <- tapply(dw2$VPmax,dw2$doy,max,na.rm=T) - tapply(dw2$VPmax,dw2$doy,min,na.rm=T)
+
+pairs(dlySummary[,c('TminSr','TmaxSr','RHsatSr','VPmaxSr')])
+plot(TminSr~Tmin,data=dlySummary)
+plot(TmaxSr~Tmax,data=dlySummary)
+plot(RHsatSr~RHsat.hrs,data=dlySummary)
+plot(VPmaxSr~VPmax,data=dlySummary)
+
+####
 syn <- read.csv('data/TM_synoptics/soms.csv',as.is=T)
 head(syn)
 syn <- syn[order(syn$doy),]
