@@ -1,0 +1,256 @@
+---
+title: "TableMt_2012"
+author: "D. Ackerly, J. Slingsby"
+date: "February 14, 2016"
+output: html_document
+---
+
+See intro material in TableMt_2012_daily
+
+The goal of this script is to see if sites differ in their temperature sensitivity relative to variation in regional temperature. In other words, does temperature increase more in some sites than others, relative to mean conditions on the landscape. The method I'm using here is to plot daily temp (min, max, T06, T14) for each site vs. the average across all sites, and then calculate the slope of this relationship. A slope = 1 would mean that temperatures at a site vary exactly in sync with regional temperature. Slope > 1 would be a site that warms up more on hot days and cools down more on coold days, and slope < 1 would be buffered, warming up less and cooling less. The intercept would also matter. A slope > 1 with an intercept above the average line would be a site that is hot in general, but still cools and heats more than the landscape as a whole.
+
+This analysis could also be done using the delta of each site relative to the regional mean, and then slope = 0 would be a coupled site, and slopes >0 and <0 would represent more or less sensitive sites. 
+
+Here's an example for T06 - temperature at 6am.
+
+```{r}
+#----------------#
+# LOAD LIBRARIES #
+#----------------#
+rm(list=ls())
+library(raster)
+library(RColorBrewer)
+```
+'meta' contains metadata on the 96 sites. 'topo10' and 'topo30' have a series of topographic features sampled from 10m and 30m dem rasters, respectively, based on lat/long positions of each site. SiteID is the unique name for each site. 
+
+Some of the variables in 'meta':
+* elevation, slope, and aspect: measured in the field - these are generally not used, and instead we use a consistent set of values taken from the 10m dem.
+* use4Analyses, use4ClimateSummaries: sites excluded due to incomplete data (see ms for criteria)
+
+Variables in topo10 and topo30:
+* d2at, d2fb, d2cs: distance to atlantic, distance to false bay, distance to coast = min(d2at,d2fb)
+* rad080, rad172, rad355: solar radiation at summer and winter solstice, and equinox. Not generally used as we have diurnal radiation at each site
+* thl0, thl315, thl337: Topographic heat load as defined by McCune and Keon 2002 JVS, with the axis for calculation of the 'folded aspect' (and thus the maximum heat load) at 0, 337 or 315 degrees. The logic is that in the S Hem, NW facing slopes would be hotter than N facing, due to higher afternoon temperatures.
+* plow050, 125, 250, 500: Percent lower pixels - the percent of pixels surrounding a focal pixel with a lower elevation, in radii of 50, 125, 250 or 500 m. A measure of potential for cold air to flow away from a spot. Higher values indicate hilltops
+* tpi050, 125, 250, 500: Elevation of a focal pixel - mean elevation in the specified radius. Another measure of hillslope position, with positive values for hilltops, negative for valley bottoms.
+
+```{r}
+#----------------#
+# LOAD DATA      #
+#----------------#
+meta <- read.csv('data/csv_masters/location_meta.csv',as.is=T)
+dim(meta)
+head(meta)
+
+topo10 <- read.csv('data/csv_masters/topo10.csv',as.is=T)
+dim(topo10)
+names(topo10)
+ 
+topo30 <- read.csv('data/csv_masters/topo30.csv',as.is=T)
+dim(topo30)
+names(topo30)
+```
+
+'dw' has all daily weather values for all sites and days. The dlySummary contains summaries of weather data on each day - average weather across sites. dlySol has diurnal radiation at each site for each day of the year, from Adam Wilson's analyses on a 30m dem.
+```{r}
+dw <- read.csv('data/csv_masters/2012daily.csv',as.is=T)
+dw$doy <- dw$doy11 - 365
+head(dw)
+
+dlySummary <- read.csv('data/csv_outfiles/dlySummary.csv',as.is=T)
+head(dlySummary)
+```
+
+Plot daily temperature at each site vs. mean temp across all sites, and calculate regression lines for each one. The red lines are sites on Table Mt and blue lines are on Silvermine (turns out to be important!). The heavy black line shows x=y.
+
+```{r}
+var <- 'T06'
+dw$y <- dw[,var]
+dlySummary$x <- dlySummary[,var]
+
+T_range <- range(dw$y,na.rm=T)
+nSites <- length(meta$siteID)
+
+N <- rep(NA,nSites)
+inter <- rep(NA,nSites)
+slp <- rep(NA,nSites)
+r2 <- rep(NA,nSites)
+Tmean <- rep(NA,nSites)
+cpal <- c('blue','red')[as.factor(meta$domain)]
+
+plot(dlySummary$x,dlySummary$x,ylim=c(T_range),type='n',xlab=paste('Average',var),ylab=paste('Site',var))
+
+i=85
+for (i in 1:nSites) {
+    dws <- subset(dw,dw$siteID==meta$siteID[i])
+    N[i] <- sum(complete.cases(cbind(dws$y,dlySummary$x)))
+    if (N[i]>200) {
+        points(dws$y~dlySummary$x,pch='.')
+        fit <- lm(dws$y~dlySummary$x)
+        abline(fit,col=cpal[i])
+        inter[i] <- fit$coefficients[1]
+        slp[i] <- fit$coefficients[2]
+        r2[i] <- summary(fit)$r.squared
+        Tmean[i] <- mean(dws$y,na.rm=T)
+    }
+}
+abline(0,1,lwd=4)
+
+## For Tmin and Tmax, two sites had very anomolous slopes - these do need to be explained but for now they are removed to avoid outlier effects on subsequent analyses. These don't affect the T06 and T14 analyses.
+meta[which(slp<0.5),]
+
+# remove them
+slp[which(slp<0.5)] <- NA
+```
+
+If these slopes were varying randomly around a single underlying value, one thing you would see is that slopes and intercepts would be negatively correlated, because a low slope will extrapolate to a high intercept. This is true in these data:
+
+```{r}
+plot(slp,inter)
+```
+
+However, if we can explain the variation in slopes, then even if there is some sampling error contributing to this, it means there is a systematic pattern on the landscape where some sites are more sensitive. As it turns out, slopes are higher on Table Mt. So Table Mt warms up more on warm days, and cools down more on cool days.
+```{r}
+boxplot(slp~meta$domain)
+```
+
+Perhaps this is an effect of elevation? Elevations are higher on the Table Mt. sites
+```{r}
+boxplot(topo10$elevation~meta$domain)
+```
+There is a positive relationship of slope with elevation (red = Table Mt, blue = Silvermine). It's actuallly tighter within Silvermine but found in both and across all sites:
+```{r}
+plot(slp~topo10$elevation,col=cpal,pch=19)
+abline(lm(slp~topo10$elevation))
+ssel <- which(meta$domain=='TABLEMT')
+abline(lm(slp[ssel]~topo10$elevation[ssel]),col='red')
+ssel <- which(meta$domain=='SILVERMINE')
+abline(lm(slp[ssel]~topo10$elevation[ssel]),col='blue')
+```
+So if elevation is the causal factor, the conclusion would be that montane sites fluctuate more than low elevation sites. This could be because the montane sites are more coupled to the free atmosphere which is fluctuating more, whereas low elevation are buffered. We could look at that by using the site at the cable car summit station as the reference, on the theory that it represents broader atmospheric conditions. This plot confirms that supposition as all other sites have slopes < 1 compared to the table mt summit station. But perhaps the underlying idea is wrong that the table is coupled with the atmosphere. On still hot days, the table can be very hot as it absorbs sunlight and not necessarily representative of 'atmospheric' conditions.
+
+```{r}
+plot(dw$y[dw$siteID=='TB.CWU'],dw$y[dw$siteID=='TB.CWU'],ylim=c(T_range),type='n',xlab=paste('TB summit',var),ylab=paste('Site',var))
+
+i=85
+for (i in 1:nSites) {
+    dws <- subset(dw,dw$siteID==meta$siteID[i])
+    N[i] <- sum(complete.cases(cbind(dws$y,dlySummary$x)))
+    if (N[i]>200) {
+        points(dws$y~dw$y[dw$siteID=='TB.CWU'],pch='.')
+        fit <- lm(dws$y~dw$y[dw$siteID=='TB.CWU'])
+        abline(fit,col=cpal[i])
+    }
+}
+abline(0,1,lwd=4)
+```
+
+
+Okay, now we're returning to the original analysis using the mean across all sites as the reference. Since Table Mt sites have higher slopes, it suggests that sites closer to the Atlantic ocean might have higher slopes. Confirmed, even for the sites on Silvermine.
+```{r}
+plot(topo10$d2at,slp,col=cpal,pch=19,xlab='Distance from Atlantic')
+```
+
+My original hypothesis was that valley bottom sites might have steeper slopes - warmer on warm days and cooler on cool nights. Now, this it the T06 data so we should look at Tmax as well. But here are the relationships with TPI and PLOW values. Nothing doing, although a suggestion of higher slopes on hilltops (opposite of hypothesis).
+```{r}
+plot(topo10$tpi50,slp,col=cpal)
+plot(topo10$tpi125,slp,col=cpal)
+plot(topo10$tpi250,slp,col=cpal)
+plot(topo10$tpi500,slp,col=cpal)
+plot(topo10$plow50,slp,col=cpal)
+plot(topo10$plow125,slp,col=cpal)
+plot(topo10$plow250,slp,col=cpal)
+plot(topo10$plow500,slp,col=cpal)
+```
+
+Finally, we can just do the glm to test for multivariate relationships. First check some pairwise relationships to avoid testing on colinear predictors. This analysis suggests a positive effect of elevation, a weak positive effect of solar exposure (north-facing slopes), and a positive effect of terrain slope (steeper terrain  have higher slopes in T06) [apologies for using slope in two different senses here!]. 
+```{r}
+cor(cbind(topo10$elevation,Tmean,topo10$tpi125,topo10$thl0,topo10$slope,topo10$d2cs,topo10$at),use='pair')
+fit <- glm(slp~elevation+tpi500+thl0+slope,data=topo10)
+summary(fit)
+```
+
+Now let's do the analysis for T14 (early afternoon temperature) and just progress straight to the glm to see the results.
+
+```{r}
+var <- 'T14'
+dw$y <- dw[,var]
+dlySummary$x <- dlySummary[,var]
+
+T_range <- range(dw$y,na.rm=T)
+nSites <- length(meta$siteID)
+
+N <- rep(NA,nSites)
+inter <- rep(NA,nSites)
+slp <- rep(NA,nSites)
+r2 <- rep(NA,nSites)
+Tmean <- rep(NA,nSites)
+cpal <- c('blue','red')[as.factor(meta$domain)]
+
+plot(dlySummary$x,dlySummary$x,ylim=c(T_range),type='n',xlab=paste('Average',var),ylab=paste('Site',var))
+
+i=85
+for (i in 1:nSites) {
+    dws <- subset(dw,dw$siteID==meta$siteID[i])
+    N[i] <- sum(complete.cases(cbind(dws$y,dlySummary$x)))
+    if (N[i]>200) {
+        points(dws$y~dlySummary$x,pch='.')
+        fit <- lm(dws$y~dlySummary$x)
+        abline(fit,col=cpal[i])
+        inter[i] <- fit$coefficients[1]
+        slp[i] <- fit$coefficients[2]
+        r2[i] <- summary(fit)$r.squared
+        Tmean[i] <- mean(dws$y,na.rm=T)
+    }
+}
+abline(0,1,lwd=4)
+
+## For Tmin and Tmax, two sites had very anomolous slopes - these do need to be explained but for now they are removed to avoid outlier effects on subsequent analyses. These don't affect the T06 and T14 analyses.
+meta[which(slp<0.5),]
+
+# remove them
+slp[which(slp<0.5)] <- NA
+```
+
+The glm gives an interesting and different result. Elevation is strong and positive again, with a similar coefficient, and then tpi500 is significant and negative. So this supports the view that valley bottoms have higher sensitivityfor T14, as hypothesized above.
+```{r}
+fit <- glm(slp~elevation+tpi500+thl0+slope,data=topo10)
+summary(fit)
+```
+
+Let's have a look
+```{r}
+plot(topo10$tpi500,slp,col=cpal,pch=19,xlab='TPI 500',ylab='T14 site sensitivity')
+```
+
+
+Extra code snippets:
+
+```{r}
+plot(N,slope,col=cpal)
+plot(r2,slp,col=cpal)
+plot(Tmean,slp,col=cpal)
+
+plot(topo10$elevation,slp,col=cpal)
+plot(topo10$d2cs,slp,col=cpal)
+plot(topo10$d2fb,slp,col=cpal)
+
+plot(topo10$thl0,slp,col=cpal)
+plot(topo10$slope,slp,col=cpal)
+
+plot(topo10$elevation~topo10$d2at,col=cpal)
+plot(topo10$elevation~topo10$d2fb,col=cpal)
+
+cor(cbind(topo10$elevation,Tmean,topo10$tpi125,topo10$thl0,topo10$slope,topo10$d2cs,topo10$at),use='pair')
+
+fit <- lm(slp~elevation+tpi125+thl0+slope+d2cs,data=topo10)
+summary(fit)
+summary(fit)$r.squared
+
+fit <- glm(slp~elevation+tpi125+thl0+slope+d2at,data=topo10)
+summary(fit)
+
+fit <- glm(slp~meta$domain+elevation+tpi125+thl0+slope,data=topo10)
+summary(fit)
+var
+```
