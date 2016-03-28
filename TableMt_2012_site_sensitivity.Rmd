@@ -227,30 +227,30 @@ plot(topo10$tpi500,slp,col=cpal,pch=19,xlab='TPI 500',ylab='T14 site sensitivity
 Extra code snippets:
 
 ```{r}
-plot(N,slope,col=cpal)
-plot(r2,slp,col=cpal)
-plot(Tmean,slp,col=cpal)
-
-plot(topo10$elevation,slp,col=cpal)
-plot(topo10$d2cs,slp,col=cpal)
-plot(topo10$d2fb,slp,col=cpal)
-
-plot(topo10$thl0,slp,col=cpal)
-plot(topo10$slope,slp,col=cpal)
-
-plot(topo10$elevation~topo10$d2at,col=cpal)
-plot(topo10$elevation~topo10$d2fb,col=cpal)
-
-cor(cbind(topo10$elevation,Tmean,topo10$tpi125,topo10$thl0,topo10$slope,topo10$d2cs,topo10$at),use='pair')
-
-fit <- lm(slp~elevation+tpi125+thl0+slope+d2cs,data=topo10)
-summary(fit)
-summary(fit)$r.squared
-
-fit <- glm(slp~elevation+tpi125+thl0+slope+d2at,data=topo10)
-summary(fit)
-
-fit <- glm(slp~meta$domain+elevation+tpi125+thl0+slope,data=topo10)
-summary(fit)
-var
+# plot(N,slope,col=cpal)
+# plot(r2,slp,col=cpal)
+# plot(Tmean,slp,col=cpal)
+# 
+# plot(topo10$elevation,slp,col=cpal)
+# plot(topo10$d2cs,slp,col=cpal)
+# plot(topo10$d2fb,slp,col=cpal)
+# 
+# plot(topo10$thl0,slp,col=cpal)
+# plot(topo10$slope,slp,col=cpal)
+# 
+# plot(topo10$elevation~topo10$d2at,col=cpal)
+# plot(topo10$elevation~topo10$d2fb,col=cpal)
+# 
+# cor(cbind(topo10$elevation,Tmean,topo10$tpi125,topo10$thl0,topo10$slope,topo10$d2cs,topo10$at),use='pair')
+# 
+# fit <- lm(slp~elevation+tpi125+thl0+slope+d2cs,data=topo10)
+# summary(fit)
+# summary(fit)$r.squared
+# 
+# fit <- glm(slp~elevation+tpi125+thl0+slope+d2at,data=topo10)
+# summary(fit)
+# 
+# fit <- glm(slp~meta$domain+elevation+tpi125+thl0+slope,data=topo10)
+# summary(fit)
+# var
 ```
